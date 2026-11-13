@@ -3,7 +3,7 @@
   --blue: #1d5fad; --blue-l: #e6eef8; --orange: #c8661c; --orange-t: #9a4a0c; --orange-l: #fbebdd; --grey: #98a2b0;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: Inter, system-ui, sans-serif; font-size: 14px; }
+html, body { height: 100%; margin: 0; background: var(--bg); color: var(--ink); font-family: Inter, system-ui, sans-serif; font-size: 14px; }
 h1 { margin: 0; font-size: 24px; font-weight: 700; }
 h2 { margin: 0; font-size: 16px; font-weight: 600; }
 a { color: var(--blue); }
@@ -54,7 +54,7 @@ a { color: var(--blue); }
 .delta { white-space: nowrap; font-weight: 600; color: var(--blue); background: var(--blue-l); padding: 2px 6px; border-radius: 4px;
   &.bad { color: var(--orange-t); background: var(--orange-l); } }
 
-.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; }
 .grid-claims { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px;
   .span-2 { grid-column: span 2; }
   @media (max-width: 1100px) { grid-template-columns: 1fr; .span-2 { grid-column: auto; } } }
@@ -81,3 +81,9 @@ a { color: var(--blue); }
 .skeleton, .chart-skeleton { background: linear-gradient(90deg, #eef1f4 25%, #f6f8fa 50%, #eef1f4 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: 8px; }
 .chart-skeleton { height: 280px; }
 @keyframes shimmer { to { background-position: -200% 0; } }
+
+/* Thin, low-contrast scroll bars inside the app */
+* { scrollbar-width: thin; scrollbar-color: #c5ccd5 transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: #c5ccd5; border-radius: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }

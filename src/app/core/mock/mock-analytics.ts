@@ -139,7 +139,7 @@ function execute(plan: Plan): { chart: VisualizationSpec; facts: Record<string, 
         insight: `Admissions for ${pl} were ${fmtInt(sum(cur))}, ${pct}% higher than the same months of 2025 (${fmtInt(sum(prev))}).`,
       };
     }
-    if (department) {
+    if (department && !dims.includes('hospital')) {
       const vals = months.map(i => Math.round(DEPT_ADMISSIONS[department][i] * k));
       const t = trendInsight(vals, `${department} admissions`);
       return {
@@ -160,10 +160,11 @@ function execute(plan: Plan): { chart: VisualizationSpec; facts: Record<string, 
       };
     }
     if (dims.includes('hospital')) {
-      const data = months.flatMap(i => HOSPITALS.map(h => ({ month: MONTH_SHORT[i], hospital: h.name, admissions: Math.round(ADMISSIONS_TOTAL[i] * h.share) })));
-      const t = trendInsight(months.map(i => ADMISSIONS_TOTAL[i]), 'Total admissions');
+      const base = department ? DEPT_ADMISSIONS[department] : ADMISSIONS_TOTAL;
+      const data = months.flatMap(i => HOSPITALS.map(h => ({ month: MONTH_SHORT[i], hospital: h.name, admissions: Math.round(base[i] * h.share) })));
+      const t = trendInsight(months.map(i => base[i]), department ? `${department} admissions` : 'Total admissions');
       return {
-        chart: { chartType: 'line', title: 'Monthly admissions by hospital', xKey: 'month', seriesKey: 'hospital', series: [{ dataKey: 'admissions', label: 'Admissions' }], data },
+        chart: { chartType: 'line', title: `Monthly ${department ? department + ' ' : ''}admissions by hospital`, xKey: 'month', seriesKey: 'hospital', series: [{ dataKey: 'admissions', label: 'Admissions' }], data },
         facts: t.facts, insight: `${t.insight} ${HOSPITALS[0].name} contributes the most admissions.`,
       };
     }

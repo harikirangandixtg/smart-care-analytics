@@ -44,29 +44,27 @@
         </p>
       } @else { <div class="chart-skeleton"></div> }
     </section>
-  </div>
 
-  <div class="grid-2">
     <section class="card">
       <div class="card-head"><div><h2>Length of stay by department</h2><p class="muted">Box = middle 50% of stays; line = median</p></div></div>
       @if (admissions().data; as a) { <app-chart [spec]="a.losDistribution" [height]="320" /> } @else { <div class="chart-skeleton"></div> }
     </section>
 
     <!-- GET /api/dashboard/claims/pending -->
-    <section class="card">
+    <section class="card span-2">
       <div class="card-head"><div><h2>Claims pending more than 30 days</h2><p class="muted">Oldest first · no patient details shown</p></div></div>
       @if (pending().data; as p) {
         <div class="table-wrap">
-          <table class="table nowrap-cells">
+          <table class="table">
             <thead>
               <tr><th scope="col">Claim</th><th scope="col">Hospital</th><th scope="col">Department</th><th scope="col">Payer</th><th scope="col" class="num">Amount</th><th scope="col" class="num">Pending</th></tr>
             </thead>
             <tbody>
               @for (c of p.items; track c.claimId) {
                 <tr>
-                  <td class="mono">{{ c.claimId }}</td><td>{{ c.hospital }}</td><td>{{ c.department }}</td><td>{{ c.payer }}</td>
-                  <td class="num">₹{{ c.amount | number: '1.0-0' : 'en-IN' }}</td>
-                  <td class="num"><span class="pill" [class.pill-warn]="c.daysPending >= 60">{{ c.daysPending }} days</span></td>
+                  <td class="mono nowrap">{{ c.claimId }}</td><td>{{ c.hospital }}</td><td>{{ c.department }}</td><td>{{ c.payer }}</td>
+                  <td class="num nowrap">₹{{ c.amount | number: '1.0-0' : 'en-IN' }}</td>
+                  <td class="num nowrap"><span class="pill" [class.pill-warn]="c.daysPending >= 60">{{ c.daysPending }} days</span></td>
                 </tr>
               } @empty {
                 <tr><td colspan="6" class="muted">No claims pending more than 30 days for these filters.</td></tr>
