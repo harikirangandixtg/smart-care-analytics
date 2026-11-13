@@ -23,17 +23,17 @@
 
   @if (revenue().data; as r) {
     <section class="card">
-      <div class="card-head"><div><h2>Revenue trend</h2><p class="muted">{{ r.charts['monthly_by_status']?.title }}</p></div><span class="ask-hint">Ask: “Show monthly revenue for 2026”</span></div>
-      <app-chart [spec]="r.charts['monthly_by_status']" [height]="300" />
+      <div class="card-head"><div><h2>Revenue trend</h2><p class="muted">{{ r.charts?.['monthly_by_status']?.title }}</p></div><span class="ask-hint">Ask: “Show monthly revenue for 2026”</span></div>
+      <app-chart [spec]="r.charts?.['monthly_by_status']" [height]="300" />
     </section>
     <div class="grid-2">
       <section class="card">
         <div class="card-head"><div><h2>Revenue by payer</h2><p class="muted">Claim amount by outcome</p></div></div>
-        <app-chart [spec]="r.charts['by_payer_status']" [height]="320" />
+        <app-chart [spec]="r.charts?.['by_payer_status']" [height]="320" />
       </section>
       <section class="card">
-        <div class="card-head"><div><h2>Pending claim amount by payer</h2><p class="muted">{{ inr(r.totals.pending_amount) }} awaiting payer decision</p></div><span class="ask-hint">Ask: “Show pending claim amounts by payer”</span></div>
-        <app-chart [spec]="r.charts['pending_by_payer']" [height]="320" />
+        <div class="card-head"><div><h2>Pending claim amount by payer</h2><p class="muted">{{ inr(r.totals?.pending_amount ?? 0) }} awaiting payer decision</p></div><span class="ask-hint">Ask: “Show pending claim amounts by payer”</span></div>
+        <app-chart [spec]="r.charts?.['pending_by_payer']" [height]="320" />
       </section>
       <!-- GET /api/dashboard/hospitals -->
       <section class="card">
@@ -42,7 +42,7 @@
       </section>
       <section class="card">
         <div class="card-head"><div><h2>Where the claim amount stands</h2><p class="muted">Total claim amount by outcome</p></div></div>
-        <app-chart [spec]="r.charts['status_mix']" [height]="260" />
+        <app-chart [spec]="r.charts?.['status_mix']" [height]="260" />
       </section>
     </div>
   } @else if (revenue().loading) {

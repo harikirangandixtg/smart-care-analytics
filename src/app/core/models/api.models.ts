@@ -95,7 +95,7 @@ export interface SummaryResponse {
   period: ReportingPeriod;
   comparison_label?: string;
   last_refreshed?: string;
-  kpis: Kpi[];
+  kpis?: Kpi[];
 }
 
 /** GET /api/dashboard/admissions — chart keys used by the screens:
@@ -104,14 +104,14 @@ export interface SummaryResponse {
 export interface AdmissionsResponse {
   period: ReportingPeriod;
   granularity: Granularity;
-  totals: {
+  totals?: {
     total_admissions: number;
     admissions_per_day: number;
     avg_los_days: number;
     top_department: { name: string; admissions: number; share: number } | null;
     peak_period: { label: string; admissions: number } | null;
   };
-  charts: Partial<Record<string, VisualizationSpec>>;
+  charts?: Partial<Record<string, VisualizationSpec>>;
   last_refreshed?: string;
 }
 
@@ -119,7 +119,7 @@ export interface AdmissionsResponse {
  *  pending_by_payer, status_mix. Amounts are INR. */
 export interface RevenueResponse {
   period: ReportingPeriod;
-  totals: {
+  totals?: {
     submitted_amount: number;
     /** null when the data model has no paid/remittance amount (spec §6). */
     paid_amount: number | null;
@@ -127,7 +127,7 @@ export interface RevenueResponse {
     denied_amount: number;
     currency: 'INR';
   };
-  charts: Partial<Record<string, VisualizationSpec>>;
+  charts?: Partial<Record<string, VisualizationSpec>>;
   last_refreshed?: string;
 }
 
@@ -146,15 +146,15 @@ export interface ClaimRow {
  *  status_distribution, outcomes_by_payer, pending_aging. */
 export interface ClaimsResponse {
   period: ReportingPeriod;
-  totals: {
+  totals?: {
     total_claims: number;
     approved_claims: number;
     denied_claims: number;
     pending_claims: number;
     pending_over_30_days: number;
   };
-  charts: Partial<Record<string, VisualizationSpec>>;
-  items: ClaimRow[];
+  charts?: Partial<Record<string, VisualizationSpec>>;
+  items?: ClaimRow[];
   total: number;
   limit: number;
   offset: number;
@@ -175,10 +175,10 @@ export interface DenialReason { code: string; description: string; count: number
 /** GET /api/dashboard/denials — chart keys: by_payer, by_reason, by_department. */
 export interface DenialsResponse {
   period: ReportingPeriod;
-  totals: { denied_claims: number; eligible_claims: number; denial_rate: number; target_rate: number | null };
-  by_payer: PayerDenialRow[];
-  reasons: DenialReason[];
-  charts: Partial<Record<string, VisualizationSpec>>;
+  totals?: { denied_claims: number; eligible_claims: number; denial_rate: number; target_rate: number | null };
+  by_payer?: PayerDenialRow[];
+  reasons?: DenialReason[];
+  charts?: Partial<Record<string, VisualizationSpec>>;
   last_refreshed?: string;
 }
 

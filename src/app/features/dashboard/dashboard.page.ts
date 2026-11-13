@@ -33,7 +33,7 @@ export class DashboardPage {
   };
 
   protected readonly payersOverTarget = computed(() => {
-    const spec = this.denials().data?.charts['by_payer'];
+    const spec = this.denials().data?.charts?.['by_payer'];
     const limit = spec?.options?.highlightAbove;
     return spec && limit !== undefined ? spec.data.filter(r => Number(r['denial_rate']) > limit).length : 0;
   });

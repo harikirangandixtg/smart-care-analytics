@@ -73,15 +73,15 @@ export class HistoryPage {
   });
 
   protected readonly shown = computed(() => this.rerunResult() ?? this.detail().data ?? null);
-  protected readonly selectedItem = computed(() => this.list().data?.items.find(i => i.query_id === this.selectedId()) ?? null);
+  protected readonly selectedItem = computed(() => this.list().data?.items?.find(i => i.query_id === this.selectedId()) ?? null);
   protected readonly parentQuestion = computed(() => {
     const p = this.selectedItem()?.parent_query_id;
-    return p ? this.list().data?.items.find(i => i.query_id === p)?.question ?? null : null;
+    return p ? this.list().data?.items?.find(i => i.query_id === p)?.question ?? null : null;
   });
 
   constructor() {
     effect(() => { this.search(); this.status(); this.page.set(1); });
-    effect(() => { const first = this.list().data?.items[0]; if (first && !this.selectedId()) this.selectedId.set(first.query_id); });
+    effect(() => { const first = this.list().data?.items?.[0]; if (first && !this.selectedId()) this.selectedId.set(first.query_id); });
   }
 
   protected select(id: string): void { this.selectedId.set(id); this.rerunResult.set(null); this.rerunError.set(null); }

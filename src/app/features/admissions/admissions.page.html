@@ -20,20 +20,20 @@
   @if (admissions().data; as a) {
     <div class="grid-2">
       <section class="card">
-        <div class="card-head"><div><h2>Admissions over time</h2><p class="muted">{{ a.charts['trend']?.title }}</p></div><span class="ask-hint">Ask: “Show monthly admissions”</span></div>
-        <app-chart [spec]="a.charts['trend']" [height]="290" />
+        <div class="card-head"><div><h2>Admissions over time</h2><p class="muted">{{ a.charts?.['trend']?.title }}</p></div><span class="ask-hint">Ask: “Show monthly admissions”</span></div>
+        <app-chart [spec]="a.charts?.['trend']" [height]="290" />
       </section>
       <section class="card">
         <div class="card-head"><div><h2>Admissions by department</h2><p class="muted">Highest first</p></div><span class="ask-hint">Ask: “Admissions by department”</span></div>
-        <app-chart [spec]="a.charts['by_department']" [height]="290" />
+        <app-chart [spec]="a.charts?.['by_department']" [height]="290" />
       </section>
       <section class="card">
         <div class="card-head"><div><h2>Compare hospitals</h2><p class="muted">Admissions per hospital in your scope</p></div><span class="ask-hint">Ask: “Compare hospitals”</span></div>
-        <app-chart [spec]="a.charts['by_hospital']" [height]="290" />
+        <app-chart [spec]="a.charts?.['by_hospital']" [height]="290" />
       </section>
       <section class="card">
         <div class="card-head"><div><h2>Average length of stay by department</h2><p class="muted">Days · dashed line = all-department average</p></div><span class="ask-hint">Ask: “Average LOS by department”</span></div>
-        <app-chart [spec]="a.charts['los_by_department']" [height]="290" />
+        <app-chart [spec]="a.charts?.['los_by_department']" [height]="290" />
       </section>
     </div>
 
@@ -47,12 +47,12 @@
 
     <div class="grid-3-2">
       <section class="card">
-        <div class="card-head"><div><h2>Admission trend by date</h2><p class="muted">{{ a.charts['daily_trend']?.title }}</p></div></div>
-        <app-chart [spec]="a.charts['daily_trend']" [height]="260" />
+        <div class="card-head"><div><h2>Admission trend by date</h2><p class="muted">{{ a.charts?.['daily_trend']?.title }}</p></div></div>
+        <app-chart [spec]="a.charts?.['daily_trend']" [height]="260" />
       </section>
       <section class="card">
         <div class="card-head"><div><h2>Admission distribution by weekday</h2><p class="muted">Selected period</p></div></div>
-        <app-chart [spec]="a.charts['weekday_distribution']" [height]="260" />
+        <app-chart [spec]="a.charts?.['weekday_distribution']" [height]="260" />
       </section>
     </div>
   } @else if (admissions().loading) {

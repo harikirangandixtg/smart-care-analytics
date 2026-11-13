@@ -12,7 +12,7 @@
   @if (summary().error; as err) { <div class="alert">{{ err }} <button type="button" class="link-btn" (click)="store.refresh()">Retry</button></div> }
   <section class="kpi-grid" aria-label="Key figures" [attr.aria-busy]="summary().loading">
     @if (summary().data; as s) {
-      @for (k of s.kpis; track k.key) {
+      @for (k of s.kpis ?? []; track k.key) {
         <a class="kpi-link" [routerLink]="kpiLink[k.key] ?? null" [attr.aria-label]="k.label + ': open details'"><app-kpi-card [kpi]="k" [comparison]="s.comparison_label ?? ''" /></a>
       }
     } @else if (summary().loading) {
@@ -31,7 +31,7 @@
           <button type="button" [attr.aria-pressed]="store.granularity() === 'quarter'" (click)="store.granularity.set('quarter')">Quarterly</button>
         </div>
       </div>
-      @if (admissions().data; as a) { <app-chart [spec]="a.charts['trend']" [height]="300" /> }
+      @if (admissions().data; as a) { <app-chart [spec]="a.charts?.['trend']" [height]="300" /> }
       @else if (admissions().error) { <div class="alert">{{ admissions().error }}</div> }
       @else { <div class="chart-skeleton"></div> }
     </section>
@@ -41,7 +41,7 @@
         <div><h2>Admissions by department</h2><p class="muted">{{ admissions().data?.charts?.['by_department']?.title }}</p></div>
         <a routerLink="/admissions" class="small strong">Admissions details</a>
       </div>
-      @if (admissions().data; as a) { <app-chart [spec]="a.charts['by_department']" [height]="300" /> }
+      @if (admissions().data; as a) { <app-chart [spec]="a.charts?.['by_department']" [height]="300" /> }
       @else if (!admissions().error) { <div class="chart-skeleton"></div> }
     </section>
 
@@ -51,14 +51,14 @@
         <div><h2>Denial rate by payer</h2><p class="muted">Denied claims ÷ all claims</p></div>
         @if (payersOverTarget()) { <span class="pill pill-warn">{{ payersOverTarget() }} payer{{ payersOverTarget() > 1 ? 's' : '' }} above 2× target</span> }
       </div>
-      @if (denials().data; as d) { <app-chart [spec]="d.charts['by_payer']" [height]="300" /> }
+      @if (denials().data; as d) { <app-chart [spec]="d.charts?.['by_payer']" [height]="300" /> }
       @else if (denials().error) { <div class="alert">{{ denials().error }}</div> }
       @else { <div class="chart-skeleton"></div> }
     </section>
 
     <section class="card">
       <div class="card-head"><div><h2>Department × month</h2><p class="muted">Admissions per cell; groups under 11 are hidden</p></div></div>
-      @if (admissions().data; as a) { <app-chart [spec]="a.charts['department_heatmap']" [height]="320" /> }
+      @if (admissions().data; as a) { <app-chart [spec]="a.charts?.['department_heatmap']" [height]="320" /> }
       @else if (!admissions().error) { <div class="chart-skeleton"></div> }
     </section>
   </div>
