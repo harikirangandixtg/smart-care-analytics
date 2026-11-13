@@ -81,7 +81,21 @@
             </div>
           </div>
           @if (exportError(); as e) { <div class="alert">{{ e }}</div> }
-          <app-chart [spec]="spec" [view]="view()" [height]="320" />
+          @if (view() === 'table' && r.table?.rows?.length) {
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr>@for (c of r.table!.columns; track c) { <th scope="col" [class.num]="isNum(r.table!.rows[0][c])">{{ colLabel(c) }}</th> }</tr></thead>
+                <tbody>
+                  @for (row of r.table!.rows; track $index) {
+                    <tr>@for (c of r.table!.columns; track c) { <td [class.num]="isNum(row[c])">{{ cell(row[c], c) }}</td> }</tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            @if (r.table!.truncated) { <p class="muted small">Showing the first {{ r.table!.rows.length }} of {{ r.table!.row_count }} rows.</p> }
+          } @else {
+            <app-chart [spec]="spec" [view]="view()" [height]="320" />
+          }
         </section>
 
         <section class="card">
@@ -94,7 +108,18 @@
               }
             </div>
           }
-          <p class="caveat">Based only on the returned figures. Groups with fewer than 11 records are hidden. Not for clinical decisions.</p>
+          @if (r.comparisons?.length) {
+            <ul class="bullets">@for (c of r.comparisons; track $index) { <li>{{ c }}</li> }</ul>
+          }
+          @if (r.definition) { <p class="muted small"><span class="strong">Definition:</span> {{ r.definition }}</p> }
+          @if (r.caveats?.length) {
+            <div class="caveats">
+              <span class="muted small strong">Notes</span>
+              <ul>@for (c of r.caveats; track $index) { <li>{{ c }}</li> }</ul>
+            </div>
+          } @else {
+            <p class="caveat">Based only on the returned figures. Not for clinical decisions.</p>
+          }
         </section>
       }
     } @else {

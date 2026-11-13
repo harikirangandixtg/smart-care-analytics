@@ -240,6 +240,13 @@ export interface AskResponse {
   execution_time_ms?: number | null;
   created_at?: string;
   parent_query_id?: string | null;
+  /** From the real API's answer block. */
+  comparisons?: string[];
+  caveats?: string[];
+  /** Metric definition, e.g. "Denied claims divided by ALL claims filed in the period". */
+  definition?: string | null;
+  /** Full result table (all columns), when the API returns one. */
+  table?: { columns: string[]; rows: Record<string, string | number | null>[]; row_count?: number; truncated?: boolean } | null;
 }
 
 export interface HistoryItem {

@@ -15,8 +15,15 @@ export function toParams(f: Partial<DashboardFilters> = {}, extra: Record<string
   return p;
 }
 
-/** DashboardFilters -> AskFilters (AskRequest.filters has no claim_status / claim_type). Empty arrays become null. */
-export function toAskFilters(f: DashboardFilters): AskFilters {
+/**
+ * DashboardFilters -> AskFilters (AskRequest.filters has no claim_status / claim_type). Empty arrays become null.
+ * Dates are left out by default so the question's own period ("last 2 months") is not overridden by the page's
+ * period filter; pass includeDates=true to force the selected period.
+ */
+export function toAskFilters(f: DashboardFilters, includeDates = false): AskFilters {
   const arr = (a: string[]) => (a.length ? a : null);
-  return { date_from: f.date_from, date_to: f.date_to, hospital_id: arr(f.hospital_id), department_id: arr(f.department_id), payer_id: arr(f.payer_id) };
+  return {
+    ...(includeDates ? { date_from: f.date_from, date_to: f.date_to } : {}),
+    hospital_id: arr(f.hospital_id), department_id: arr(f.department_id), payer_id: arr(f.payer_id),
+  };
 }

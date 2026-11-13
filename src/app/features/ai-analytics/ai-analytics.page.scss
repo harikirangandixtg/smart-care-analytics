@@ -33,3 +33,7 @@
 .fact { background: var(--bg); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 2px; strong { font-size: 17px; } }
 .caveat { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
 @media (max-width: 900px) { :host { height: auto; } .ask { flex-direction: column; height: auto; } .chat { max-width: none; height: auto; border-right: 0; } .thread { max-height: 60vh; } .result { height: auto; overflow: visible; } }
+
+.bullets { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; line-height: 1.5; }
+.caveats { background: var(--bg); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px;
+  ul { margin: 0; padding-left: 18px; font-size: 12px; color: var(--muted); line-height: 1.5; } }
