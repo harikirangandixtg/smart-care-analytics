@@ -11,19 +11,25 @@ See **VALIDATION.md** for how the Word spec, the OpenAPI spec and these screens 
 
 ```bash
 npm install
-npm start        # http://localhost:4200
+npm start        # http://localhost:4200 — /api/* is forwarded to FastAPI at 127.0.0.1:8000
 ```
 
-## Switch to the real API
+`npm start` uses `proxy.conf.json` (wired in `angular.json`), so the browser only talks to `localhost:4200`
+and CORS never applies in development. Change the port in `proxy.conf.json` if FastAPI runs elsewhere.
+
+## Real API vs mock data
 
 `src/environments/environment.ts`:
 
 ```ts
-export const environment = { apiBaseUrl: 'http://localhost:8000', useMockApi: false, mockLatencyMs: 350 };
+export const environment = { apiBaseUrl: '', useMockApi: false, mockLatencyMs: 350 };
 ```
 
-To switch one endpoint at a time, delete its entry from `ROUTES` in `core/mock/mock-api.interceptor.ts`.
-That call goes to FastAPI and the rest stay mocked.
+- `useMockApi: false` → real FastAPI through the proxy (default).
+- `useMockApi: true` → built-in synthetic data, no backend needed. Delete an entry from `ROUTES` in
+  `core/mock/mock-api.interceptor.ts` to send just that endpoint to FastAPI.
+- Deployed build (no dev server): set `apiBaseUrl` to the FastAPI URL and allow the app's origin in FastAPI's
+  `CORSMiddleware` (`allow_headers=["*"]` — the app sends `x-session-id` and `x-correlation-id`).
 
 ## Screens and the APIs they call
 
