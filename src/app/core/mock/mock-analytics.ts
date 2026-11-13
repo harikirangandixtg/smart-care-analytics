@@ -1,8 +1,6 @@
-// Rule-based stand-in for /api/analytics/*. It mimics the real pipeline's shape
-// (plan -> data -> facts -> insight) so the UI can be built before the agents exist.
-import {
-  AskRequest, AskResponse, HistoryDetail, HistoryItem, HistoryListResponse, HistoryQuery, HistoryStatus, VisualizationSpec,
-} from '../models/api.models';
+// Rule-based stand-in for /api/analytics/*. Mimics the real pipeline's shape
+// (plan -> data -> facts -> insight) and the documented response envelope.
+import { AskRequest, AskResponse, AskStatus, FollowupRequest, HistoryItem, HistoryResponse, VisualizationSpec } from '../models/api.models';
 import {
   ADMISSIONS_TOTAL, CLAIM_AMOUNT_CR, DENIAL_TARGET, DEPARTMENTS, DEPT_ADMISSIONS, HOSPITALS, LOS_BY_DEPT, LOS_MONTHLY,
   MONTH_LONG, MONTH_SHORT, PAYERS, fmtInt, pendingByPayer, pendingByPayerAndHospital, periodLabel, round1, scopeLabel, seeded, sum,
@@ -22,21 +20,24 @@ const METRIC_LABEL: Record<Metric, string> = {
   admissions: 'Admissions',
   avg_los: 'Avg length of stay',
   denial_rate: 'Denial rate',
-  claim_amount: 'Claim amount',
+  claim_amount: 'Submitted claim amount',
   pending_over_30: 'Claims pending > 30 days',
+};
+const METRIC_KEY: Record<Metric, string> = {
+  admissions: 'admissions', avg_los: 'avg_los', denial_rate: 'denial_rate', claim_amount: 'submitted_amount', pending_over_30: 'pending_claims',
 };
 
 const DEPT_ALIASES: [RegExp, string][] = [
   [/cardio/, 'Cardiology'], [/ortho/, 'Orthopedics'], [/general medicine|gen\.? med/, 'General Medicine'],
   [/neuro/, 'Neurology'], [/onco|cancer/, 'Oncology'], [/pa?ediatric|children/, 'Pediatrics'],
+  [/gastro/, 'Gastroenterology'], [/pulmo|respiratory/, 'Pulmonology'],
 ];
 
-class MockError extends Error {
+export class MockError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
-export { MockError };
 
-const newId = (prefix: string) => `${prefix}-${Math.random().toString(16).slice(2, 8).toUpperCase()}`;
+const uuid = () => crypto.randomUUID();
 
 // ---------------------------------------------------------------------------
 // 1. Interpret (stands in for analytics-planner + followup-resolver agents)
@@ -49,11 +50,11 @@ function interpret(question: string, prev: Plan | undefined, hospitalIds: string
   const q = question.toLowerCase();
 
   const hosp = q.match(/hospital\s*(\d+)/);
-  if (hosp && !HOSPITALS.some(h => h.id === `H${hosp[1].padStart(2, '0')}`)) {
-    return { kind: 'reject', status: 'forbidden', message: `Hospital ${hosp[1].padStart(2, '0')} is outside your access. You can ask about Hospitals 01–03.` };
+  if (hosp && !HOSPITALS.some(h => h.id === `H${hosp[1].padStart(3, '0')}`)) {
+    return { kind: 'reject', status: 'blocked', message: `Hospital ${hosp[1].padStart(2, '0')} is outside your access. You can ask about Hospitals 01–03.` };
   }
   if (/ignore (your|all|previous)|list (all )?patients|patient names?|diagnos|treatment|prescri/.test(q)) {
-    return { kind: 'reject', status: 'unsupported', message: 'I can answer operational questions about admissions, claims, denials and length of stay, not individual patients or clinical advice.' };
+    return { kind: 'reject', status: 'blocked', message: 'I can answer operational questions about admissions, claims, denials and length of stay, not individual patients or clinical advice.' };
   }
 
   let metric: Metric | undefined =
@@ -66,7 +67,7 @@ function interpret(question: string, prev: Plan | undefined, hospitalIds: string
 
   const isFollowup = !metric && !!prev;
   if (!metric && !prev) {
-    return { kind: 'reject', status: 'clarify', message: 'Which measure do you want: admissions, claim amount, denial rate, length of stay or pending claims? And for which period?' };
+    return { kind: 'reject', status: 'clarification_needed', message: 'Which measure do you want: admissions, claim amount, denial rate, length of stay or pending claims? And for which period?' };
   }
   metric = metric ?? prev!.metric;
 
@@ -91,7 +92,7 @@ function interpret(question: string, prev: Plan | undefined, hospitalIds: string
     dims = metric === 'admissions' || metric === 'claim_amount' ? ['month']
       : metric === 'avg_los' ? ['department'] : ['payer'];
   }
-  if (metric === 'denial_rate') dims = ['payer'];
+  if (metric === 'denial_rate') dims = dims.includes('hospital') ? ['hospital'] : ['payer'];
   if (metric === 'pending_over_30') dims = dims.includes('hospital') ? ['payer', 'hospital'] : ['payer'];
 
   return { kind: 'plan', plan: { metric, dims, department, months, hospitalIds } };
@@ -223,6 +224,14 @@ function execute(plan: Plan): { chart: VisualizationSpec; facts: Record<string, 
     };
   }
 
+  if (metric === 'denial_rate' && dims.includes('hospital')) {
+    const rows = HOSPITALS.map((h, i) => ({ hospital: h.name, denialRate: [9.6, 10.4, 10.6][i] })).sort((a, b) => b.denialRate - a.denialRate);
+    return {
+      chart: { chartType: 'bar', title: `Denial rate by hospital, ${pl}`, xKey: 'hospital', series: [{ dataKey: 'denialRate', label: 'Denial rate' }], data: rows, options: { orientation: 'horizontal', unit: '%', target: DENIAL_TARGET } },
+      facts: { Highest: `${rows[0].hospital} · ${rows[0].denialRate}%`, Lowest: `${rows[rows.length - 1].hospital} · ${rows[rows.length - 1].denialRate}%`, Target: `${DENIAL_TARGET}%` },
+      insight: `All ${rows.length} hospitals are above the ${DENIAL_TARGET}% denial target. ${rows[0].hospital} is highest at ${rows[0].denialRate}%; ${rows[rows.length - 1].hospital} is lowest at ${rows[rows.length - 1].denialRate}%.`,
+    };
+  }
   if (metric === 'denial_rate') {
     const rows = [...PAYERS].sort((a, b) => b.denial - a.denial).map(p => ({ payer: p.name, denialRate: p.denial }));
     const above = rows.filter(r => r.denialRate > DENIAL_TARGET).length;
@@ -262,121 +271,103 @@ function appliedFilters(plan: Plan): Record<string, string> {
   return f;
 }
 
+
 // ---------------------------------------------------------------------------
 // Conversation + history store (in memory, per browser session)
 // ---------------------------------------------------------------------------
-interface Stored { item: HistoryItem; plan?: Plan; result: AskResponse }
-const conversations = new Map<string, { plan?: Plan; lastId: string }>();
-const history: Stored[] = [];
+interface Stored { result: AskResponse; plan?: Plan; scope: string }
+const conversations = new Map<string, { plan?: Plan; lastId: string; hospitalIds: string[] }>();
+const store: Stored[] = [];
 
-function toStatus(s: AskResponse['status']): HistoryStatus {
-  return s === 'success' ? 'answered' : s === 'no_data' ? 'no_data' : s === 'forbidden' ? 'blocked' : 'clarified';
+function validate(question: unknown, conversationId?: unknown) {
+  const detail: { loc: (string | number)[]; msg: string; type: string }[] = [];
+  if (typeof question !== 'string' || !question.trim()) detail.push({ loc: ['body', 'question'], msg: 'Field required', type: 'missing' });
+  else if (question.length > 500) detail.push({ loc: ['body', 'question'], msg: 'String should have at most 500 characters', type: 'string_too_long' });
+  if (conversationId !== undefined && conversationId !== null && !/^[0-9a-f-]{36}$/i.test(String(conversationId)))
+    detail.push({ loc: ['body', 'conversation_id'], msg: 'Input should be a valid UUID', type: 'uuid_parsing' });
+  if (detail.length) throw Object.assign(new MockError(422, 'Validation error'), { detail });
 }
 
-function run(req: AskRequest, isFollowup: boolean, askedAt = new Date()): AskResponse {
-  const question = (req.question ?? '').trim().slice(0, 500);
-  if (!question) throw new MockError(422, 'Please enter a question.');
-  const conv = req.conversationId ? conversations.get(req.conversationId) : undefined;
+function run(question: string, conversationId: string | null, hospitalIds: string[], isFollowup: boolean, at = new Date()): AskResponse {
+  const conv = conversationId ? conversations.get(conversationId) : undefined;
   if (isFollowup && !conv) throw new MockError(404, 'That conversation has expired. Start a new question.');
-  const conversationId = conv ? req.conversationId! : newId('CONV');
-  const hospitalIds = req.filters?.hospitalIds ?? [];
-  const rnd = seeded(question.length * 31 + askedAt.getMinutes());
-  const executionTimeMs = Math.round(280 + rnd() * 320);
-  const referenceId = newId('QRY');
-
-  const interp = interpret(question, conv?.plan, hospitalIds);
-  let result: AskResponse;
-  let plan: Plan | undefined;
+  const conversation_id = conv ? conversationId! : uuid();
+  const scopeIds = conv ? conv.hospitalIds : hospitalIds;
+  const rnd = seeded(question.length * 31 + at.getMinutes());
+  const execution_time_ms = Math.round(380 + rnd() * 420);
+  const query_id = uuid();
+  const interp = interpret(question.trim(), conv?.plan, scopeIds);
+  const base = { query_id, conversation_id, question: question.trim(), execution_time_ms, created_at: at.toISOString(), parent_query_id: conv?.lastId ?? null };
+  let result: AskResponse; let plan: Plan | undefined;
 
   if (interp.kind === 'reject') {
-    result = { status: interp.status, message: interp.message, conversationId, referenceId, executionTimeMs };
+    result = { ...base, status: interp.status as AskStatus, message: interp.message, chart: null, insight: null, row_count: null };
   } else {
     plan = interp.plan;
     const out = execute(plan);
+    const reporting_period = plan.months.length
+      ? { date_from: `2026-${String(plan.months[0] + 1).padStart(2, '0')}-01`, date_to: `2026-${String(plan.months[plan.months.length - 1] + 1).padStart(2, '0')}-28` } : null;
     result = out
-      ? { status: 'success', metric: plan.metric, metricLabel: METRIC_LABEL[plan.metric], reportingPeriod: { from: `${'2026-' + String(plan.months[0] + 1).padStart(2, '0')}-01`, to: `2026-${String(plan.months[plan.months.length - 1] + 1).padStart(2, '0')}-28` },
-          appliedFilters: appliedFilters(plan), chart: out.chart, facts: out.facts, insight: out.insight, conversationId, referenceId, executionTimeMs }
-      : { status: 'no_data', message: 'No records matched these filters. The data currently runs to 31 October 2026.', metric: plan.metric, metricLabel: METRIC_LABEL[plan.metric],
-          appliedFilters: appliedFilters(plan), conversationId, referenceId, executionTimeMs };
+      ? { ...base, status: 'success', metric: METRIC_KEY[plan.metric], metric_label: METRIC_LABEL[plan.metric], reporting_period, applied_filters: appliedFilters(plan),
+          chart: out.chart, insight: out.insight, supporting_metrics: Object.entries(out.facts).map(([label, value]) => ({ label, value: String(value) })), row_count: out.chart.data.length }
+      : { ...base, status: 'no_data', metric: METRIC_KEY[plan.metric], metric_label: METRIC_LABEL[plan.metric], applied_filters: appliedFilters(plan),
+          message: 'No records matched these filters. The data currently runs to 31 October 2026.', chart: null, insight: null, row_count: 0 };
   }
-
-  const item: HistoryItem = {
-    id: referenceId,
-    askedAt: askedAt.toISOString(),
-    question,
-    metricLabel: plan ? METRIC_LABEL[plan.metric] : null,
-    scopeLabel: plan ? Object.entries(appliedFilters(plan)).filter(([k]) => k !== 'Metric' && k !== 'Hospitals').map(([, v]) => v).join(' · ') : (result.message ?? '').split(/[.?]/)[0],
-    status: toStatus(result.status),
-    rowCount: result.chart ? result.chart.data.length : result.status === 'no_data' ? 0 : null,
-    durationMs: executionTimeMs,
-    conversationId,
-    parentId: conv?.lastId ?? null,
-  };
-  history.push({ item, plan, result });
-  conversations.set(conversationId, { plan: plan ?? conv?.plan, lastId: referenceId });
+  const scope = plan ? Object.entries(appliedFilters(plan)).filter(([k]) => k !== 'Metric' && k !== 'Hospitals').map(([, v]) => v).join(' · ') : (result.message ?? '').split(/[.?]/)[0];
+  store.push({ result, plan, scope });
+  conversations.set(conversation_id, { plan: plan ?? conv?.plan, lastId: query_id, hospitalIds: scopeIds });
   return result;
 }
 
-export const mockAsk = (req: AskRequest) => run(req, false);
-export const mockFollowup = (req: AskRequest) => run(req, true);
-
-export function mockHistory(q: HistoryQuery): HistoryListResponse {
-  const all = [...history].sort((a, b) => b.item.askedAt.localeCompare(a.item.askedAt)).map(s => s.item);
-  const term = (q.q ?? '').toLowerCase();
-  const rows = all.filter(i => (!term || i.question.toLowerCase().includes(term)) && (!q.status || i.status === q.status));
-  const page = q.page ?? 1, size = q.size ?? 10;
-  return {
-    summary: {
-      asked: all.length,
-      answered: all.filter(i => i.status === 'answered').length,
-      clarifiedOrNoData: all.filter(i => i.status === 'clarified' || i.status === 'no_data').length,
-      blocked: all.filter(i => i.status === 'blocked').length,
-    },
-    items: rows.slice((page - 1) * size, page * size), total: rows.length, page, size,
-  };
+/** POST /api/analytics/ask */
+export function mockAsk(body: AskRequest): AskResponse {
+  validate(body?.question, body?.conversation_id);
+  const ids = body.filters?.hospital_id ?? [];
+  // an existing conversation_id on /ask continues that conversation
+  return run(body.question, body.conversation_id ?? null, ids, !!body.conversation_id);
 }
 
-export function mockHistoryDetail(id: string): HistoryDetail {
-  const s = history.find(h => h.item.id === id);
+/** POST /api/analytics/followup */
+export function mockFollowup(body: FollowupRequest): AskResponse {
+  if (!body?.conversation_id) throw Object.assign(new MockError(422, 'Validation error'), { detail: [{ loc: ['body', 'conversation_id'], msg: 'Field required', type: 'missing' }] });
+  validate(body.question, body.conversation_id);
+  return run(body.question, body.conversation_id, [], true);
+}
+
+/** GET /api/analytics/history?limit&offset */
+export function mockHistory(limit: number, offset: number): HistoryResponse {
+  const all = [...store].sort((a, b) => (b.result.created_at ?? '').localeCompare(a.result.created_at ?? ''));
+  const items: HistoryItem[] = all.map(s => ({
+    query_id: s.result.query_id, conversation_id: s.result.conversation_id, parent_query_id: s.result.parent_query_id ?? null,
+    question: s.result.question, status: s.result.status, metric_label: s.result.metric_label ?? null, scope_label: s.scope,
+    row_count: s.result.row_count ?? null, execution_time_ms: s.result.execution_time_ms ?? null, created_at: s.result.created_at!,
+  }));
+  return { items: items.slice(offset, offset + limit), total: items.length, limit, offset };
+}
+
+/** GET /api/analytics/{query_id} */
+export function mockResult(id: string): AskResponse {
+  const s = store.find(x => x.result.query_id === id);
   if (!s) throw new MockError(404, 'Query not found.');
-  const parent = s.item.parentId ? history.find(h => h.item.id === s.item.parentId) : undefined;
-  const plan = Object.entries(s.result.appliedFilters ?? {}).map(([label, value]) => ({ label, value }));
-  plan.push({ label: 'Reference', value: s.item.id });
-  return { item: s.item, parentQuestion: parent?.item.question ?? null, plan, result: s.result };
+  return s.result;
 }
 
-export function mockRerun(id: string): AskResponse {
-  const s = history.find(h => h.item.id === id);
-  if (!s) throw new MockError(404, 'Query not found.');
-  if (!s.plan) throw new MockError(409, 'This question was not answered, so there is nothing to re-run.');
-  const out = execute(s.plan);
-  const referenceId = newId('QRY');
-  return out
-    ? { ...s.result, chart: out.chart, facts: out.facts, insight: out.insight, referenceId, executionTimeMs: 300 + Math.round(Math.random() * 200) }
-    : { ...s.result, status: 'no_data', referenceId };
-}
-
-// ---------------------------------------------------------------------------
-// Seed history by replaying conversations through the same engine
-// ---------------------------------------------------------------------------
+// Seed history by replaying conversations through the same engine.
 (function seed() {
-  const now = Date.now();
-  const at = (minsAgo: number) => new Date(now - minsAgo * 60_000);
-  const convs: { q: string; minsAgo: number }[][] = [
-    [{ q: 'Claims pending more than 30 days', minsAgo: 3 * 1440 + 120 }, { q: 'Split by hospital', minsAgo: 3 * 1440 + 118 }],
-    [{ q: 'Pediatrics admissions in Hospital 03 last week', minsAgo: 1440 + 380 }],
-    [{ q: 'How are we doing?', minsAgo: 1440 + 90 }],
-    [{ q: 'Average length of stay by department', minsAgo: 1440 + 70 }],
-    [{ q: 'Show claims for Hospital 07', minsAgo: 420 }],
-    [{ q: 'Which payers have the highest denial rate?', minsAgo: 240 }],
-    [{ q: 'How many admissions occurred each month this year?', minsAgo: 150 }],
-    [{ q: 'Show monthly admissions by department for the last six months', minsAgo: 4 }, { q: 'Now show only Cardiology', minsAgo: 2 }],
+  const t = Date.now();
+  const at = (minsAgo: number) => new Date(t - minsAgo * 60_000);
+  const convs: { q: string; m: number }[][] = [
+    [{ q: 'Claims pending more than 30 days', m: 3 * 1440 + 120 }, { q: 'Split by hospital', m: 3 * 1440 + 118 }],
+    [{ q: 'Pediatrics admissions in Hospital 03 last week', m: 1440 + 380 }],
+    [{ q: 'How are we doing?', m: 1440 + 90 }],
+    [{ q: 'Average length of stay by department', m: 1440 + 70 }],
+    [{ q: 'Show claims for Hospital 07', m: 420 }],
+    [{ q: 'Which payers have the highest denial rate?', m: 240 }],
+    [{ q: 'How many admissions occurred each month this year?', m: 150 }],
+    [{ q: 'Show monthly admissions by department for the last six months', m: 4 }, { q: 'Now show only Cardiology', m: 2 }],
   ];
   for (const c of convs) {
-    let convId: string | null = null;
-    c.forEach((turn, i) => {
-      const r = run({ question: turn.q, conversationId: convId }, i > 0, at(turn.minsAgo));
-      convId = r.conversationId;
-    });
+    let id: string | null = null;
+    c.forEach((turn, i) => { id = run(turn.q, id, [], i > 0, at(turn.m)).conversation_id; });
   }
 })();

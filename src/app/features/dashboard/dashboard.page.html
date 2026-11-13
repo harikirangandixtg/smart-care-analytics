@@ -1,0 +1,65 @@
+<div class="page">
+  <app-page-header title="Dashboard" description="Admissions, claim amounts and denials for your permitted hospitals" [updated]="summary().loadedAt">
+    <app-filter-bar [department]="true" [payer]="true">
+      <a routerLink="/ai-analytics" class="btn btn-primary">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+        Ask a question
+      </a>
+    </app-filter-bar>
+  </app-page-header>
+
+  <!-- GET /api/dashboard/summary -->
+  @if (summary().error; as err) { <div class="alert">{{ err }} <button type="button" class="link-btn" (click)="store.refresh()">Retry</button></div> }
+  <section class="kpi-grid" aria-label="Key figures" [attr.aria-busy]="summary().loading">
+    @if (summary().data; as s) {
+      @for (k of s.kpis; track k.key) {
+        <a class="kpi-link" [routerLink]="kpiLink[k.key] ?? null" [attr.aria-label]="k.label + ': open details'"><app-kpi-card [kpi]="k" [comparison]="s.comparison_label ?? ''" /></a>
+      }
+    } @else if (summary().loading) {
+      @for (i of [1, 2, 3, 4, 5, 6]; track i) { <div class="kpi skeleton"></div> }
+    }
+  </section>
+
+  <div class="grid-2">
+    <!-- GET /api/dashboard/admissions -->
+    <section class="card">
+      <div class="card-head">
+        <div><h2>Admissions trend</h2><p class="muted">{{ admissions().data?.charts?.['trend']?.title ?? 'Loading…' }}</p></div>
+        <div class="segmented" role="group" aria-label="Granularity">
+          <button type="button" [attr.aria-pressed]="store.granularity() === 'month'" (click)="store.granularity.set('month')">Monthly</button>
+          <button type="button" [attr.aria-pressed]="store.granularity() === 'week'" (click)="store.granularity.set('week')">Weekly</button>
+          <button type="button" [attr.aria-pressed]="store.granularity() === 'quarter'" (click)="store.granularity.set('quarter')">Quarterly</button>
+        </div>
+      </div>
+      @if (admissions().data; as a) { <app-chart [spec]="a.charts['trend']" [height]="300" /> }
+      @else if (admissions().error) { <div class="alert">{{ admissions().error }}</div> }
+      @else { <div class="chart-skeleton"></div> }
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <div><h2>Admissions by department</h2><p class="muted">{{ admissions().data?.charts?.['by_department']?.title }}</p></div>
+        <a routerLink="/admissions" class="small strong">Admissions details</a>
+      </div>
+      @if (admissions().data; as a) { <app-chart [spec]="a.charts['by_department']" [height]="300" /> }
+      @else if (!admissions().error) { <div class="chart-skeleton"></div> }
+    </section>
+
+    <!-- GET /api/dashboard/denials -->
+    <section class="card">
+      <div class="card-head">
+        <div><h2>Denial rate by payer</h2><p class="muted">Denied claims ÷ all claims</p></div>
+        @if (payersOverTarget()) { <span class="pill pill-warn">{{ payersOverTarget() }} payer{{ payersOverTarget() > 1 ? 's' : '' }} above 2× target</span> }
+      </div>
+      @if (denials().data; as d) { <app-chart [spec]="d.charts['by_payer']" [height]="300" /> }
+      @else if (denials().error) { <div class="alert">{{ denials().error }}</div> }
+      @else { <div class="chart-skeleton"></div> }
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>Department × month</h2><p class="muted">Admissions per cell; groups under 11 are hidden</p></div></div>
+      @if (admissions().data; as a) { <app-chart [spec]="a.charts['department_heatmap']" [height]="320" /> }
+      @else if (!admissions().error) { <div class="chart-skeleton"></div> }
+    </section>
+  </div>
+</div>

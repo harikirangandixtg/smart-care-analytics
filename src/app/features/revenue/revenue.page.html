@@ -1,0 +1,64 @@
+<div class="page">
+  <app-page-header title="Revenue" description="Claim amounts by outcome: billed, paid, pending and denied" [updated]="revenue().loadedAt">
+    <app-filter-bar [payer]="true" [granularity]="true" />
+  </app-page-header>
+
+  <div class="notice" role="note">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><line x1="12" y1="11" x2="12" y2="16" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
+    <span><strong>How to read these figures.</strong> This POC uses claims data. <strong>Submitted claim amount</strong> is what was billed to payers, not money received. Only the <strong>paid amount</strong> is shown as recognised revenue, and only when the data includes it. <strong>Pending</strong> may still be paid or denied.</span>
+  </div>
+
+  @if (revenue().error; as err) { <div class="alert">{{ err }}</div> }
+
+  <section class="stat-grid stat-grid-4" aria-label="Claim amount totals">
+    @if (revenue().data?.totals; as t) {
+      <app-stat-card label="Submitted claim amount" [value]="inr(t.submitted_amount)" note="Billed to payers · not revenue" accent="#A9C6E8" />
+      <app-stat-card label="Paid amount" [value]="t.paid_amount === null ? 'Not available' : inr(t.paid_amount)" [note]="t.paid_amount === null ? 'No payment data in this source' : pct(t.paid_amount, t.submitted_amount) + ' of submitted · recognised revenue'" />
+      <app-stat-card label="Pending amount" [value]="inr(t.pending_amount)" [note]="pct(t.pending_amount, t.submitted_amount) + ' · awaiting payer decision'" accent="#98A2B0" />
+      <app-stat-card label="Denied amount" [value]="inr(t.denied_amount)" [note]="pct(t.denied_amount, t.submitted_amount) + ' · rejected by payers'" accent="#C8661C" />
+    } @else if (revenue().loading) {
+      @for (i of [1, 2, 3, 4]; track i) { <div class="stat-card skeleton"></div> }
+    }
+  </section>
+
+  @if (revenue().data; as r) {
+    <section class="card">
+      <div class="card-head"><div><h2>Revenue trend</h2><p class="muted">{{ r.charts['monthly_by_status']?.title }}</p></div><span class="ask-hint">Ask: “Show monthly revenue for 2026”</span></div>
+      <app-chart [spec]="r.charts['monthly_by_status']" [height]="300" />
+    </section>
+    <div class="grid-2">
+      <section class="card">
+        <div class="card-head"><div><h2>Revenue by payer</h2><p class="muted">Claim amount by outcome</p></div></div>
+        <app-chart [spec]="r.charts['by_payer_status']" [height]="320" />
+      </section>
+      <section class="card">
+        <div class="card-head"><div><h2>Pending claim amount by payer</h2><p class="muted">{{ inr(r.totals.pending_amount) }} awaiting payer decision</p></div><span class="ask-hint">Ask: “Show pending claim amounts by payer”</span></div>
+        <app-chart [spec]="r.charts['pending_by_payer']" [height]="320" />
+      </section>
+      <!-- GET /api/dashboard/hospitals -->
+      <section class="card">
+        <div class="card-head"><div><h2>Revenue by hospital</h2><p class="muted">Submitted claim amount vs paid</p></div><span class="ask-hint">Ask: “Compare revenue between hospitals”</span></div>
+        @if (hospitals().error) { <div class="alert">{{ hospitals().error }}</div> } @else { <app-chart [spec]="hospitalChart()" [height]="260" /> }
+      </section>
+      <section class="card">
+        <div class="card-head"><div><h2>Where the claim amount stands</h2><p class="muted">Total claim amount by outcome</p></div></div>
+        <app-chart [spec]="r.charts['status_mix']" [height]="260" />
+      </section>
+    </div>
+  } @else if (revenue().loading) {
+    <div class="card"><div class="chart-skeleton"></div></div>
+  }
+
+  <!-- GET /api/dashboard/departments -->
+  <section class="card">
+    <div class="card-head"><div><h2>Revenue by department</h2><p class="muted">Submitted claim amount vs paid, highest first</p></div><span class="ask-hint">Ask: “Which department generates the highest claim amount?”</span></div>
+    @if (departments().error) { <div class="alert">{{ departments().error }}</div> }
+    @else if (departments().data) { <app-chart [spec]="departmentChart()" [height]="300" /> }
+    @else { <div class="chart-skeleton"></div> }
+  </section>
+
+  <section class="card">
+    <div class="card-head"><div><h2>Questions this screen answers</h2><p class="muted">Each opens in AI Analytics</p></div></div>
+    <app-question-list [rows]="questions" />
+  </section>
+</div>

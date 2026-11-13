@@ -1,9 +1,22 @@
 import { HttpParams } from '@angular/common/http';
-import { DashboardFilters } from '../models/api.models';
+import { AskFilters, DashboardFilters } from '../models/api.models';
 
-export function filterParams(f: DashboardFilters, extra: Record<string, string | number | undefined> = {}): HttpParams {
-  let p = new HttpParams().set('from', f.from).set('to', f.to);
-  for (const id of f.hospitalIds) p = p.append('hospital_ids', id);
-  for (const [k, v] of Object.entries(extra)) if (v !== undefined && v !== '') p = p.set(k, String(v));
+type Scalar = string | number | boolean | null | undefined;
+
+/** Builds query params the way FastAPI expects: arrays as repeated keys (?hospital_id=H01&hospital_id=H02). */
+export function toParams(f: Partial<DashboardFilters> = {}, extra: Record<string, Scalar | Scalar[]> = {}): HttpParams {
+  let p = new HttpParams();
+  const add = (k: string, v: Scalar | Scalar[]) => {
+    if (Array.isArray(v)) { for (const x of v) if (x !== null && x !== undefined && x !== '') p = p.append(k, String(x)); }
+    else if (v !== null && v !== undefined && v !== '') p = p.set(k, String(v));
+  };
+  for (const [k, v] of Object.entries(f)) add(k, v as Scalar | Scalar[]);
+  for (const [k, v] of Object.entries(extra)) add(k, v);
   return p;
+}
+
+/** DashboardFilters -> AskFilters (AskRequest.filters has no claim_status / claim_type). Empty arrays become null. */
+export function toAskFilters(f: DashboardFilters): AskFilters {
+  const arr = (a: string[]) => (a.length ? a : null);
+  return { date_from: f.date_from, date_to: f.date_to, hospital_id: arr(f.hospital_id), department_id: arr(f.department_id), payer_id: arr(f.payer_id) };
 }

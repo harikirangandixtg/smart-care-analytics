@@ -9,7 +9,7 @@ export const PALETTE = {
   sequential: ['#EAF1FA', '#CFE0F3', '#A9C6E8', '#7FA7D6', '#4F82C0', '#1D5FAD', '#123F78'],
 };
 
-const STATUS_COLOURS: Record<string, string> = { Paid: PALETTE.blue, Denied: PALETTE.orange, Pending: PALETTE.grey };
+export const STATUS_COLOURS: Record<string, string> = { Paid: PALETTE.blue, Approved: PALETTE.blue, Denied: PALETTE.orange, Pending: PALETTE.grey, Submitted: '#A9C6E8' };
 
 const base = (): EChartsCoreOption => ({
   color: PALETTE.series,
@@ -26,7 +26,7 @@ const axisCommon = {
 };
 
 const fmt = (unit = '') => (v: number) =>
-  unit === '%' ? `${v}%` : unit === ' Cr' ? `₹${v} Cr` : `${typeof v === 'number' ? v.toLocaleString('en-IN') : v}${unit}`;
+  unit === '%' ? `${v}%` : unit === ' Cr' ? `₹${typeof v === 'number' ? +v.toFixed(2) : v} Cr` : `${typeof v === 'number' ? v.toLocaleString('en-IN') : v}${unit}`;
 
 const unique = <T>(xs: T[]) => [...new Set(xs)];
 const num = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0));
@@ -60,6 +60,7 @@ function lineOrBar(spec: VisualizationSpec, kind: 'line' | 'bar'): EChartsCoreOp
   const o = spec.options ?? {};
   const horizontal = kind === 'bar' && o.orientation === 'horizontal';
   const multi = series.length > 1;
+  const stacked = kind === 'bar' && !!o.stacked;
   const format = fmt(o.unit);
 
   const catAxis = { type: 'category', data: categories, ...axisCommon, splitLine: { show: false }, ...(horizontal ? { inverse: true, axisLabel: { color: PALETTE.ink, fontSize: 12 } } : {}) };
@@ -76,6 +77,8 @@ function lineOrBar(spec: VisualizationSpec, kind: 'line' | 'bar'): EChartsCoreOp
     series: series.map((s, i) => ({
       name: s.name,
       type: kind,
+      stack: stacked ? 'total' : undefined,
+      color: STATUS_COLOURS[s.name],
       data: kind === 'bar' && o.highlightAbove !== undefined
         ? s.values.map(v => ({ value: v, itemStyle: { color: (v ?? 0) > o.highlightAbove! ? PALETTE.orange : PALETTE.blue } }))
         : s.values,
@@ -84,8 +87,10 @@ function lineOrBar(spec: VisualizationSpec, kind: 'line' | 'bar'): EChartsCoreOp
       lineStyle: { width: 2.5 },
       areaStyle: kind === 'line' && o.area && !multi ? { opacity: 0.08 } : undefined,
       barMaxWidth: horizontal ? 22 : 36,
-      itemStyle: { borderRadius: horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0] },
-      label: kind === 'bar' && !multi ? { show: true, position: horizontal ? 'right' : 'top', formatter: (p: { value: number }) => format(p.value), color: PALETTE.ink, fontWeight: 600, fontSize: 12 } : undefined,
+      itemStyle: { borderRadius: stacked ? 0 : horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0] },
+      label: stacked && i === series.length - 1 ? { show: true, position: horizontal ? 'right' : 'top', color: PALETTE.ink, fontWeight: 600, fontSize: 11,
+        formatter: (p: { dataIndex: number }) => format(+series.reduce((a, x) => a + (x.values[p.dataIndex] ?? 0), 0).toFixed(2)) }
+        : kind === 'bar' && !multi ? { show: true, position: horizontal ? 'right' : 'top', formatter: (p: { value: number }) => format(p.value), color: PALETTE.ink, fontWeight: 600, fontSize: 12 } : undefined,
       markPoint: o.markPeak && !multi && i === 0 ? { symbol: 'pin', symbolSize: 0, data: [{ type: 'max', name: 'Peak' }], label: { show: true, formatter: (p: { value: number }) => `Peak ${format(p.value)}`, backgroundColor: PALETTE.ink, color: '#fff', padding: [4, 8], borderRadius: 4, offset: [0, -14], fontSize: 11, fontWeight: 600 } } : undefined,
       markLine: o.target !== undefined && i === 0 ? { symbol: 'none', silent: true, lineStyle: { color: PALETTE.ink, type: 'dashed' }, label: { formatter: `Target ${format(o.target)}`, color: PALETTE.ink, fontWeight: 600, position: horizontal ? 'start' : 'insideEndTop' }, data: [horizontal ? { xAxis: o.target } : { yAxis: o.target }] } : undefined,
     })),
@@ -98,8 +103,9 @@ function pie(spec: VisualizationSpec): EChartsCoreOption {
     ...base(),
     tooltip: { trigger: 'item', valueFormatter: fmt(spec.options?.unit) },
     legend: { bottom: 0, textStyle: { color: PALETTE.muted } },
-    series: [{ type: 'pie', radius: ['45%', '70%'], center: ['50%', '45%'], itemStyle: { borderColor: '#fff', borderWidth: 2 },
-      label: { formatter: '{b}\n{d}%', color: PALETTE.ink }, data: spec.data.map(r => ({ name: String(r[spec.xKey!]), value: num(r[key]) })) }],
+    series: [{ type: 'pie', radius: spec.options?.donut === false ? ['0%', '70%'] : ['48%', '72%'], center: ['50%', '45%'], itemStyle: { borderColor: '#fff', borderWidth: 2 },
+      label: { formatter: (p: { name: string; percent: number }) => `${p.name}\n${p.percent.toFixed(1)}%`, color: PALETTE.ink },
+      data: spec.data.map(r => { const name = String(r[spec.xKey!]); return { name, value: num(r[key]), itemStyle: STATUS_COLOURS[name] ? { color: STATUS_COLOURS[name] } : undefined }; }) }],
   };
 }
 
@@ -213,4 +219,21 @@ export function specColumns(spec: VisualizationSpec): { key: string; label: stri
   if (spec.seriesKey) cols.push({ key: spec.seriesKey, label: title(spec.seriesKey), numeric: false });
   for (const s of spec.series) cols.push({ key: s.dataKey, label: s.label, numeric: true });
   return cols;
+}
+
+const SUPPORTED: string[] = ['line', 'bar', 'pie', 'heatmap', 'sankey', 'funnel', 'gauge', 'boxplot', 'table'];
+
+/** Frontend spec §14: validate chartType and field names before rendering. Returns a reason when the chart can't be drawn. */
+export function specProblem(spec: VisualizationSpec | null | undefined): string | null {
+  if (!spec) return 'No chart was returned.';
+  if (!Array.isArray(spec.data) || spec.data.length === 0) return 'No data matched these filters.';
+  if (!SUPPORTED.includes(spec.chartType)) return `Chart type “${spec.chartType}” isn't supported; showing the table instead.`;
+  if (spec.chartType === 'sankey') return spec.data.every(r => 'source' in r && 'target' in r && 'value' in r) ? null : 'The flow chart data is incomplete; showing the table instead.';
+  if (spec.chartType === 'gauge' || spec.chartType === 'table') return null;
+  const keys = new Set(Object.keys(spec.data[0]));
+  if (spec.xKey && !keys.has(spec.xKey)) return `Field “${spec.xKey}” is missing from the data; showing the table instead.`;
+  if (spec.seriesKey && !keys.has(spec.seriesKey)) return `Field “${spec.seriesKey}” is missing from the data; showing the table instead.`;
+  const missing = (spec.series ?? []).filter(x => !keys.has(x.dataKey) && !(spec.chartType === 'boxplot'));
+  if (missing.length) return `Field “${missing[0].dataKey}” is missing from the data; showing the table instead.`;
+  return null;
 }

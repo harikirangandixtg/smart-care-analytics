@@ -3,7 +3,7 @@
   <section class="chat" aria-label="Conversation">
     <div class="chat-head">
       <div>
-        <h2>Ask analytics</h2>
+        <h2>AI Analytics</h2>
         <p class="muted">Answers use only your permitted hospitals</p>
       </div>
       @if (messages().length) {
@@ -55,14 +55,14 @@
     @if (result(); as r) {
       <header class="page-header">
         <div>
-          <h1>{{ r.chart?.title ?? r.metricLabel }}</h1>
-          <p class="muted">Answer to your latest question · ran in {{ ((r.executionTimeMs ?? 0) / 1000).toFixed(2) }} s</p>
+          <h1>{{ r.chart?.title ?? r.metric_label ?? r.question }}</h1>
+          <p class="muted">Answer to your latest question · ran in {{ ((r.execution_time_ms ?? 0) / 1000).toFixed(2) }} s @if (r.row_count !== null && r.row_count !== undefined) { · {{ r.row_count }} rows }</p>
         </div>
       </header>
 
       <div class="chips">
         <span class="muted small strong">Showing</span>
-        <span class="chip chip-strong">Metric: {{ r.metricLabel }}</span>
+        @if (r.metric_label) { <span class="chip chip-strong">Metric: {{ r.metric_label }}</span> }
         @for (c of chips(); track c[0]) { <span class="chip">{{ c[0] }}: {{ c[1] }}</span> }
       </div>
 
@@ -77,9 +77,10 @@
                 <button type="button" [attr.aria-pressed]="view() === 'chart'" (click)="view.set('chart')">Chart</button>
                 <button type="button" [attr.aria-pressed]="view() === 'table'" (click)="view.set('table')">Table</button>
               </div>
-              <button type="button" class="btn btn-small" (click)="exportCsv()">Export CSV</button>
+              <button type="button" class="btn btn-small" (click)="exportCsv()" [disabled]="exporting()">{{ exporting() ? 'Exporting…' : 'Export CSV' }}</button>
             </div>
           </div>
+          @if (exportError(); as e) { <div class="alert">{{ e }}</div> }
           <app-chart [spec]="spec" [view]="view()" [height]="320" />
         </section>
 
@@ -88,8 +89,8 @@
           <p class="body-text">{{ r.insight }}</p>
           @if (facts().length) {
             <div class="facts">
-              @for (f of facts(); track f[0]) {
-                <div class="fact"><span class="muted small">{{ f[0] }}</span><strong>{{ f[1] }}</strong></div>
+              @for (f of facts(); track f.label) {
+                <div class="fact"><span class="muted small">{{ f.label }}</span><strong>{{ f.value }}</strong></div>
               }
             </div>
           }
@@ -98,7 +99,7 @@
       }
     } @else {
       <div class="result-empty">
-        <h1>Ask a question about admissions, claims or length of stay</h1>
+        <h1>Ask a question about admissions, claims, revenue or length of stay</h1>
         <p class="muted">The chart, the figures behind it and a short explanation will appear here. Follow-ups like “Now show only Cardiology” keep your earlier filters.</p>
       </div>
     }

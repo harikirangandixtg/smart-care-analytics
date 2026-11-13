@@ -1,151 +1,289 @@
-// Wire contracts shared with the FastAPI backend (JSON in camelCase).
+// ============================================================================
+// Wire contracts for the Smart Healthcare Analytics API (OpenAPI 3.1, v1.0.0).
+//
+// REQUESTS follow the OpenAPI spec exactly (snake_case query params, array
+// filters, AskRequest / FollowupRequest / ExportRequest bodies).
+//
+// RESPONSES: the OpenAPI spec declares every 200 response as a free-form
+// `object`, so the shapes below are the PROPOSED contract. Envelopes are
+// snake_case (as in the frontend spec's /ask example); chart objects use the
+// camelCase chart contract from section 14 of the frontend spec. The backend
+// should publish these as Pydantic `response_model`s so OpenAPI documents them.
+// ============================================================================
 
+// ---------------------------------------------------------------- filters ---
+/** Pattern from OpenAPI: ^[A-Za-z]{1,3}\d{1,4}$, max 8 chars, max 12 items. */
+export type EntityId = string;
+export type Granularity = 'week' | 'month' | 'quarter';
+export type ClaimStatus = 'Paid' | 'Denied' | 'Pending';
+export type ClaimType = 'Primary' | 'Secondary';
+export type GroupBy = 'hospital' | 'department' | 'payer';
+
+/** Common dashboard query parameters (identical on every /api/dashboard/* path). */
+export interface DashboardFilters {
+  date_from: string | null;           // YYYY-MM-DD, inclusive
+  date_to: string | null;             // YYYY-MM-DD, inclusive
+  hospital_id: EntityId[];            // empty = all hospitals in the user's scope
+  department_id: EntityId[];
+  payer_id: EntityId[];               // claim metrics only
+  claim_status?: ClaimStatus[];
+  claim_type?: ClaimType[];
+}
+
+/** AskRequest.filters / ExportRequest.filters (no claim_status / claim_type). */
+export interface AskFilters {
+  date_from?: string | null;
+  date_to?: string | null;
+  hospital_id?: EntityId[] | null;
+  department_id?: EntityId[] | null;
+  payer_id?: EntityId[] | null;
+}
+
+// --------------------------------------------------------------- charts -----
 export type ChartType =
   | 'line' | 'bar' | 'pie' | 'heatmap' | 'sankey' | 'funnel' | 'gauge' | 'boxplot' | 'table';
 
-export interface SeriesDef {
-  dataKey: string;
-  label: string;
-}
+export interface SeriesDef { dataKey: string; label: string }
 
-/** One chart contract for dashboard blocks AND /ask answers. */
+/** Chart contract (frontend spec §14). Shared by dashboard endpoints and /ask. */
 export interface VisualizationSpec {
   chartType: ChartType;
   title: string;
-  /** Category axis key (month, department, payer...). */
   xKey?: string;
-  /** Optional second dimension in long-format data (e.g. department per month). */
+  /** Optional second dimension in long-format data (e.g. month × department). */
   seriesKey?: string;
   series: SeriesDef[];
   data: Record<string, string | number | null>[];
   options?: {
     orientation?: 'vertical' | 'horizontal';
-    unit?: string;
+    stacked?: boolean;
+    unit?: string;              // '%', ' d', ' Cr' …
     target?: number;
     max?: number;
-    /** Bars above this value are drawn in the alert colour. */
     highlightAbove?: number;
     area?: boolean;
     markPeak?: boolean;
+    donut?: boolean;
   };
 }
 
-export interface DashboardFilters {
-  hospitalIds: string[]; // empty = all hospitals in the user's scope
-  from: string;          // ISO yyyy-mm-dd
-  to: string;
-}
+// -------------------------------------------------------------- metadata ----
+export interface NamedEntity { id: EntityId; name: string }
+export interface MetricDef { key: string; label: string; unit?: string; description?: string }
+/** /api/metadata/* — service accepts either a bare array or `{ items: [...] }`. */
+export type ListEnvelope<T> = T[] | { items: T[] };
 
-export interface FilterOptions {
-  hospitals: { id: string; name: string }[];
-  departments: string[];
-  payers: string[];
-  dataFrom: string;
-  dataTo: string;
-}
+export interface HealthResponse { status: string; [k: string]: unknown }
+
+// ------------------------------------------------------------- dashboard ----
+export type KpiUnit = 'count' | 'currency_inr' | 'percent' | 'days' | 'decimal';
 
 export interface Kpi {
   key: string;
   label: string;
-  value: number;
-  display: string;
-  change: { label: string; direction: 'up' | 'down'; favourable: boolean };
-  sparkline: number[];
+  value: number | null;            // null = not available in the data model
+  unit: KpiUnit;
+  note?: string;
+  change?: { label: string; direction: 'up' | 'down' | 'flat'; favourable: boolean } | null;
+  sparkline?: number[];
 }
 
+export interface ReportingPeriod { date_from: string; date_to: string }
+
+/** GET /api/dashboard/summary */
 export interface SummaryResponse {
-  period: { from: string; to: string };
-  comparisonLabel: string;
+  period: ReportingPeriod;
+  comparison_label?: string;
+  last_refreshed?: string;
   kpis: Kpi[];
 }
 
-export type Granularity = 'month' | 'week';
-
+/** GET /api/dashboard/admissions — chart keys used by the screens:
+ *  trend, by_department, by_hospital, los_by_department, department_heatmap,
+ *  daily_trend, weekday_distribution. */
 export interface AdmissionsResponse {
+  period: ReportingPeriod;
   granularity: Granularity;
-  trend: VisualizationSpec;
-  byDepartment: VisualizationSpec;
-  byHospital: VisualizationSpec;
-  heatmap: VisualizationSpec;
-  losDistribution: VisualizationSpec;
+  totals: {
+    total_admissions: number;
+    admissions_per_day: number;
+    avg_los_days: number;
+    top_department: { name: string; admissions: number; share: number } | null;
+    peak_period: { label: string; admissions: number } | null;
+  };
+  charts: Partial<Record<string, VisualizationSpec>>;
+  last_refreshed?: string;
 }
 
+/** GET /api/dashboard/revenue — chart keys: monthly_by_status, by_payer_status,
+ *  pending_by_payer, status_mix. Amounts are INR. */
+export interface RevenueResponse {
+  period: ReportingPeriod;
+  totals: {
+    submitted_amount: number;
+    /** null when the data model has no paid/remittance amount (spec §6). */
+    paid_amount: number | null;
+    pending_amount: number;
+    denied_amount: number;
+    currency: 'INR';
+  };
+  charts: Partial<Record<string, VisualizationSpec>>;
+  last_refreshed?: string;
+}
+
+export interface ClaimRow {
+  claim_id: string;
+  hospital_name: string;
+  department_name: string;
+  payer_name: string;
+  claim_amount: number;
+  status: ClaimStatus;
+  days_pending: number | null;
+  aging_band: string | null;
+}
+
+/** GET /api/dashboard/claims (paged with limit / offset) — chart keys:
+ *  status_distribution, outcomes_by_payer, pending_aging. */
 export interface ClaimsResponse {
-  denialByPayer: VisualizationSpec;
-  outcomes: VisualizationSpec;     // sankey payer -> status
-  denialGauge: VisualizationSpec;
-  totals: { claims: number; denied: number; pending: number; denialRate: number; target: number };
-  topDenier?: { payer: string; shareOfDenied: number; shareOfVolume: number };
-}
-
-export interface PendingClaim {
-  claimId: string;
-  hospital: string;
-  department: string;
-  payer: string;
-  amount: number;
-  daysPending: number;
-}
-
-export interface Page<T> {
-  items: T[];
+  period: ReportingPeriod;
+  totals: {
+    total_claims: number;
+    approved_claims: number;
+    denied_claims: number;
+    pending_claims: number;
+    pending_over_30_days: number;
+  };
+  charts: Partial<Record<string, VisualizationSpec>>;
+  items: ClaimRow[];
   total: number;
-  page: number;
-  size: number;
+  limit: number;
+  offset: number;
+  last_refreshed?: string;
 }
 
-export type AskStatus = 'success' | 'no_data' | 'clarify' | 'unsupported' | 'forbidden' | 'error';
+export interface PayerDenialRow {
+  payer_id: EntityId;
+  payer_name: string;
+  total_claims: number;
+  denied_claims: number;
+  pending_claims: number;
+  denial_rate: number; // percent
+}
 
+export interface DenialReason { code: string; description: string; count: number; share: number }
+
+/** GET /api/dashboard/denials — chart keys: by_payer, by_reason, by_department. */
+export interface DenialsResponse {
+  period: ReportingPeriod;
+  totals: { denied_claims: number; eligible_claims: number; denial_rate: number; target_rate: number | null };
+  by_payer: PayerDenialRow[];
+  reasons: DenialReason[];
+  charts: Partial<Record<string, VisualizationSpec>>;
+  last_refreshed?: string;
+}
+
+/** GET /api/dashboard/hospitals and /api/dashboard/departments */
+export interface DimensionRow {
+  id: EntityId;
+  name: string;
+  admissions: number;
+  avg_los_days: number;
+  total_claims: number;
+  denied_claims: number;
+  denial_rate: number;
+  submitted_amount: number;
+  paid_amount: number | null;
+  pending_amount: number;
+  denied_amount: number;
+}
+export interface DimensionResponse { period: ReportingPeriod; rows: DimensionRow[] }
+
+/** GET /api/dashboard/trends?metric=&group_by= */
+export interface TrendsResponse {
+  metric: string;
+  granularity: Granularity;
+  group_by: GroupBy | null;
+  chart: VisualizationSpec;
+}
+
+// ------------------------------------------------------------- analytics ----
+/** POST /api/analytics/ask body (OpenAPI AskRequest). */
 export interface AskRequest {
-  question: string;
-  filters?: Partial<DashboardFilters>;
-  conversationId?: string | null;
+  question: string;                 // maxLength 500
+  filters?: AskFilters | null;
+  conversation_id?: string | null;  // uuid
 }
 
+/** POST /api/analytics/followup body (OpenAPI FollowupRequest). */
+export interface FollowupRequest {
+  conversation_id: string;          // uuid, required
+  question: string;                 // maxLength 500
+}
+
+export type AskStatus = 'success' | 'no_data' | 'clarification_needed' | 'blocked' | 'error';
+
+/** Response of /ask, /followup and GET /api/analytics/{query_id} (spec §4). */
 export interface AskResponse {
-  status: AskStatus;
-  message?: string;
-  metric?: string;
-  metricLabel?: string;
-  reportingPeriod?: { from: string; to: string };
-  appliedFilters?: Record<string, string>;
-  chart?: VisualizationSpec;
-  facts?: Record<string, string | number>;
-  insight?: string;
-  executionTimeMs?: number;
-  conversationId: string;
-  referenceId?: string;
+  query_id: string;
+  conversation_id: string;
+  status: AskStatus | string;
+  question: string;
+  metric?: string | null;
+  metric_label?: string | null;
+  message?: string | null;          // why it was blocked / what to clarify
+  chart?: VisualizationSpec | null;
+  insight?: string | null;
+  supporting_metrics?: { label: string; value: string }[];
+  reporting_period?: ReportingPeriod | null;
+  applied_filters?: Record<string, string>;
+  row_count?: number | null;
+  execution_time_ms?: number | null;
+  created_at?: string;
+  parent_query_id?: string | null;
 }
-
-export type HistoryStatus = 'answered' | 'no_data' | 'clarified' | 'blocked';
 
 export interface HistoryItem {
-  id: string;
-  askedAt: string; // ISO timestamp
+  query_id: string;
+  conversation_id: string;
+  parent_query_id?: string | null;
   question: string;
-  metricLabel: string | null;
-  scopeLabel: string;
-  status: HistoryStatus;
-  rowCount: number | null;
-  durationMs: number;
-  conversationId: string;
-  parentId?: string | null;
+  status: AskStatus | string;
+  metric_label?: string | null;
+  scope_label?: string | null;
+  row_count?: number | null;
+  execution_time_ms?: number | null;
+  created_at: string;
 }
 
-export interface HistoryQuery {
-  q?: string;
-  status?: HistoryStatus | '';
-  page?: number;
-  size?: number;
+/** GET /api/analytics/history?limit=&offset= */
+export interface HistoryResponse { items: HistoryItem[]; total: number; limit: number; offset: number }
+
+// --------------------------------------------------------------- reports ----
+/** POST /api/reports/export body (OpenAPI ExportRequest). */
+export interface ExportRequest {
+  source: 'analytics' | 'dashboard';
+  format?: 'csv' | 'json';
+  query_id?: string | null;
+  dashboard?: 'summary' | 'admissions' | 'revenue' | 'claims' | 'denials' | 'departments' | 'hospitals' | 'trends' | null;
+  section?: string | null;
+  filters?: AskFilters | null;
+  granularity?: Granularity;
+  metric?: string | null;
+  group_by?: GroupBy | null;
 }
 
-export interface HistoryListResponse extends Page<HistoryItem> {
-  summary: { asked: number; answered: number; clarifiedOrNoData: number; blocked: number };
+export type ReportStatus = 'queued' | 'processing' | 'completed' | 'failed';
+export interface ReportResponse {
+  report_id: string;
+  status: ReportStatus;
+  format: 'csv' | 'json';
+  file_name?: string;
+  created_at?: string;
+  error?: string | null;
 }
 
-export interface HistoryDetail {
-  item: HistoryItem;
-  parentQuestion?: string | null;
-  plan: { label: string; value: string }[];
-  result: AskResponse;
+// ---------------------------------------------------------------- errors ----
+/** FastAPI 422 body (OpenAPI HTTPValidationError). */
+export interface HttpValidationError {
+  detail: { loc: (string | number)[]; msg: string; type: string }[];
 }

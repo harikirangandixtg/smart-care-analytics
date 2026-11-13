@@ -1,104 +1,84 @@
-# Smart Care Analytics – Angular frontend (POC)
+# Smart Care Analytics: Angular frontend (POC)
 
-Angular 20 (standalone components, signals) + Apache ECharts via ngx-echarts.
-Every screen calls the real backend endpoints through services; while the
-FastAPI backend is not ready, a mock HTTP interceptor answers those calls with
-static synthetic data.
+Angular 20 (standalone components, signals) and Apache ECharts via ngx-echarts.
+Six screens call the FastAPI backend exactly as defined in the
+**Smart Healthcare Analytics API** OpenAPI spec (v1.0.0). Until the backend is up,
+a mock interceptor answers the same paths with synthetic data.
+
+See **VALIDATION.md** for how the Word spec, the OpenAPI spec and these screens were reconciled.
 
 ## Run
 
 ```bash
 npm install
-npm start            # http://localhost:4200
+npm start        # http://localhost:4200
 ```
 
-## Switch from mock data to the real API
+## Switch to the real API
 
 `src/environments/environment.ts`:
 
 ```ts
-export const environment = {
-  apiBaseUrl: 'http://localhost:8000', // FastAPI base URL
-  useMockApi: false,                   // <- turn the mock interceptor off
-  mockLatencyMs: 350,
-};
+export const environment = { apiBaseUrl: 'http://localhost:8000', useMockApi: false, mockLatencyMs: 350 };
 ```
 
-Nothing else changes: services already call these URLs. You can also go
-endpoint by endpoint: delete a route from `ROUTES` in
-`core/mock/mock-api.interceptor.ts`, and that request passes through to the
-real backend while the others stay mocked.
+To switch one endpoint at a time, delete its entry from `ROUTES` in `core/mock/mock-api.interceptor.ts`.
+That call goes to FastAPI and the rest stay mocked.
 
-## Endpoints the UI calls
+## Screens and the APIs they call
 
-| Method | Endpoint | Used by |
-|---|---|---|
-| GET | `/health` | `MetaService.health()` (not shown in UI) |
-| GET | `/api/meta/filters` | Hospital / payer dropdowns (`FilterBarComponent`, Claims payer filter) |
-| GET | `/api/dashboard/summary?from&to&hospital_ids` | Overview KPI cards, sparklines, change badges |
-| GET | `/api/dashboard/admissions?from&to&hospital_ids&granularity=month\|week` | Overview trend (monthly/weekly), by department, heatmap; Claims LOS boxplot |
-| GET | `/api/dashboard/claims?from&to&hospital_ids&payer` | Overview denial-by-payer; Claims Sankey, gauge, totals |
-| GET | `/api/dashboard/claims/pending?min_days=30&payer&page&size` | Claims pending > 30 days table |
-| POST | `/api/analytics/ask` | Ask page, first question |
-| POST | `/api/analytics/followup` | Ask page, follow-ups (sends `conversationId`) |
-| GET | `/api/analytics/history?q&status&page&size` | Query history list + summary cards |
-| GET | `/api/analytics/history/{id}` | Query history detail panel |
-| POST | `/api/analytics/history/{id}/rerun` | "Re-run with latest data" |
-| GET | `/api/admin/agents` | Mocked only; no screen yet |
+| Screen (route) | Calls |
+|---|---|
+| Dashboard (`/dashboard`) | `GET /api/dashboard/summary`, `/admissions`, `/denials` |
+| Admissions (`/admissions`) | `GET /api/dashboard/admissions`, `/trends?metric=admissions&group_by=department` |
+| Revenue (`/revenue`) | `GET /api/dashboard/revenue`, `/hospitals`, `/departments` |
+| Claims & denials (`/claims`) | `GET /api/dashboard/claims` (totals; and `claim_status=Pending&limit&offset` for the list), `/denials`, `/trends?metric=denial_rate` |
+| AI Analytics (`/ai-analytics`) | `POST /api/analytics/ask`, `POST /api/analytics/followup`, `POST /api/reports/export` → `GET /api/reports/{id}` → `GET /api/reports/{id}?download=true` |
+| Query history (`/history`) | `GET /api/analytics/history?limit=50`, `GET /api/analytics/{query_id}`, `POST /api/analytics/ask` (re-run) |
+| All screens | `GET /api/metadata/hospitals`, `/departments`, `/payers` (filter options) |
 
-`/api/dashboard/revenue` is not called: no screen uses it in this POC.
+Every dashboard call sends the common OpenAPI filters: `date_from`, `date_to`, `hospital_id[]`,
+`department_id[]`, `payer_id[]` (arrays as repeated keys), plus `granularity` / `top` / `limit` / `offset` where defined.
+`x-session-id` is added to analytics and report calls; `x-correlation-id` to all calls (`core/http/session.interceptor.ts`).
 
-Request/response types are in `src/app/core/models/api.models.ts`. The JSON
-is **camelCase**, so in FastAPI give the Pydantic models
-`model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)`
-and return with `response_model_by_alias=True` (the default).
+## Contracts
 
-### One chart contract
+- **Requests**: exactly as the OpenAPI spec (`AskRequest`, `FollowupRequest`, `ExportRequest`, query params).
+- **Responses**: OpenAPI documents every response as an untyped `object`, so `core/models/api.models.ts` holds the
+  **proposed** shapes: snake_case envelopes (as in the spec's `/ask` example) and the camelCase chart contract from spec §14.
+  The backend should publish these as Pydantic `response_model`s.
 
-Every chart, from the dashboard endpoints and from `/ask`, is a `VisualizationSpec`:
+Chart contract (any dashboard chart or `/ask` result):
 
 ```json
-{ "chartType": "bar", "title": "Denial rate by payer", "xKey": "payer",
-  "series": [{ "dataKey": "denialRate", "label": "Denial rate" }],
-  "data": [{ "payer": "Payer A", "denialRate": 21.4 }],
-  "options": { "orientation": "horizontal", "unit": "%", "target": 8, "highlightAbove": 16 } }
+{ "chartType": "bar", "title": "Admissions by Department", "xKey": "department",
+  "series": [{ "dataKey": "admissions", "label": "Admissions" }],
+  "data": [{ "department": "Cardiology", "admissions": 1250 }],
+  "options": { "orientation": "horizontal", "stacked": false, "unit": "%", "target": 8 } }
 ```
 
-`shared/chart/spec-to-option.ts` turns it into ECharts settings for
-`line | bar | pie | heatmap | sankey | funnel | gauge | boxplot | table`.
-Long-format data with `seriesKey` (e.g. month × department) becomes one series
-per group. Sankey rows are `{source, target, value}`; boxplot rows are
-`{<xKey>, min, q1, median, q3, max}`.
+`chartType`: `line | bar | pie | heatmap | sankey | funnel | gauge | boxplot | table`. `seriesKey` turns long-format rows
+into one series per group. `ChartComponent` validates the type and field names and falls back to a table (spec §14).
 
 ## Structure
 
 ```
 src/app/
   core/
-    models/api.models.ts      wire contracts
-    services/                 MetaService, DashboardService, AnalyticsService
-    state/filters.store.ts    shared hospital + period filters (signals)
-    utils/request-state.ts    loading / data / error signal per request
-    mock/                     mock interceptor, static data, rule-based /ask stand-in
-    echarts.ts                tree-shaken ECharts registration
-  layout/shell.component.*    sidebar, mock banner
-  shared/                     chart, data-table, kpi-card, sparkline, filter-bar
-  dashboard/overview.page.*   Overview
-  analytics-chat/ask.page.*   Ask analytics (chat + result)
-  claims/claims.page.*        Claims & payers
-  history/history.page.*      Query history
+    models/api.models.ts      request contracts (OpenAPI) + proposed response contracts
+    services/                 MetadataService, DashboardService, AnalyticsService, ReportService, http-params
+    http/session.interceptor  x-session-id, x-correlation-id
+    state/filters.store.ts    global filters (hospital, department, payer, period, granularity, refresh)
+    utils/request-state.ts    loading / data / error signals; safe error messages (401/403/422/timeouts)
+    mock/                     mock interceptor, synthetic data, rule-based /ask stand-in, reports
+  layout/                     sidebar shell
+  shared/                     chart, data-table, kpi-card, stat-card, page-header, filter-bar, question-list
+  features/                   dashboard, ai-analytics, admissions, revenue, claims, history
 ```
 
 ## Notes
 
-- **Logo:** `public/xt-global-logo.png` is cut from a screenshot; replace it with
-  the original high-resolution file (same name). It sits on a light panel in the sidebar.
-- **Auth:** add an Entra ID (MSAL) interceptor in `app.config.ts` next to the
-  mock interceptor when wiring the real API.
-- **Mock `/ask`:** a keyword-based stand-in so the chat can be demoed. It
-  understands admissions, claim amount, denial rate, length of stay and pending
-  claims; department names; "this year / last six / three months"; "by
-  department / by hospital / compare with last year"; follow-ups that keep the
-  previous plan; out-of-scope hospitals (blocked) and patient/clinical
-  questions (unsupported). The real agents replace it entirely.
-- The mock keeps history in memory, so it resets on page reload.
+- **Logo**: `public/xt-global-logo.png` was cut from a screenshot; replace it with the original file (same name).
+- **Auth**: add an Entra ID (MSAL) bearer-token interceptor before `sessionInterceptor` in `app.config.ts`.
+- **Mock data**: the same synthetic dataset as the design canvas (11,065 admissions, 13,280 claims, 1,345 denied,
+  ₹48.6 Cr billed, Jan–Oct 2026). History lives in memory and resets on reload.

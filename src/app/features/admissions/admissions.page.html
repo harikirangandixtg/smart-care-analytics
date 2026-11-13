@@ -1,0 +1,66 @@
+<div class="page">
+  <app-page-header title="Admissions" description="Admission patterns across hospitals and departments" [updated]="admissions().loadedAt">
+    <app-filter-bar [department]="true" [granularity]="true" />
+  </app-page-header>
+
+  @if (admissions().error; as err) { <div class="alert">{{ err }}</div> }
+
+  <section class="stat-grid" aria-label="Admission totals">
+    @if (admissions().data?.totals; as t) {
+      <app-stat-card label="Total admissions" [value]="(t.total_admissions | number) ?? ''" note="Selected period" />
+      <app-stat-card label="Admissions per day" [value]="(t.admissions_per_day | number: '1.1-1') ?? ''" note="Average across the period" />
+      <app-stat-card label="Avg length of stay" [value]="(t.avg_los_days | number: '1.1-1') + ' days'" note="Admission to discharge" accent="#C8661C" />
+      <app-stat-card label="Busiest department" [value]="t.top_department?.name ?? '—'" [note]="t.top_department ? (t.top_department.admissions | number) + ' admissions · ' + t.top_department.share + '%' : ''" />
+      <app-stat-card label="Peak month" [value]="t.peak_period ? t.peak_period.label : '—'" [note]="t.peak_period ? (t.peak_period.admissions | number) + ' admissions' : ''" />
+    } @else if (admissions().loading) {
+      @for (i of [1, 2, 3, 4, 5]; track i) { <div class="stat-card skeleton"></div> }
+    }
+  </section>
+
+  @if (admissions().data; as a) {
+    <div class="grid-2">
+      <section class="card">
+        <div class="card-head"><div><h2>Admissions over time</h2><p class="muted">{{ a.charts['trend']?.title }}</p></div><span class="ask-hint">Ask: “Show monthly admissions”</span></div>
+        <app-chart [spec]="a.charts['trend']" [height]="290" />
+      </section>
+      <section class="card">
+        <div class="card-head"><div><h2>Admissions by department</h2><p class="muted">Highest first</p></div><span class="ask-hint">Ask: “Admissions by department”</span></div>
+        <app-chart [spec]="a.charts['by_department']" [height]="290" />
+      </section>
+      <section class="card">
+        <div class="card-head"><div><h2>Compare hospitals</h2><p class="muted">Admissions per hospital in your scope</p></div><span class="ask-hint">Ask: “Compare hospitals”</span></div>
+        <app-chart [spec]="a.charts['by_hospital']" [height]="290" />
+      </section>
+      <section class="card">
+        <div class="card-head"><div><h2>Average length of stay by department</h2><p class="muted">Days · dashed line = all-department average</p></div><span class="ask-hint">Ask: “Average LOS by department”</span></div>
+        <app-chart [spec]="a.charts['los_by_department']" [height]="290" />
+      </section>
+    </div>
+
+    <!-- GET /api/dashboard/trends?metric=admissions&group_by=department -->
+    <section class="card">
+      <div class="card-head"><div><h2>Admissions by month and department</h2><p class="muted">{{ byDeptTrend().data?.chart?.title ?? 'Loading…' }}</p></div><span class="ask-hint">Ask: “Admissions by month and department”</span></div>
+      @if (byDeptTrend().data; as t) { <app-chart [spec]="t.chart" [height]="320" /> }
+      @else if (byDeptTrend().error) { <div class="alert">{{ byDeptTrend().error }}</div> }
+      @else { <div class="chart-skeleton"></div> }
+    </section>
+
+    <div class="grid-3-2">
+      <section class="card">
+        <div class="card-head"><div><h2>Admission trend by date</h2><p class="muted">{{ a.charts['daily_trend']?.title }}</p></div></div>
+        <app-chart [spec]="a.charts['daily_trend']" [height]="260" />
+      </section>
+      <section class="card">
+        <div class="card-head"><div><h2>Admission distribution by weekday</h2><p class="muted">Selected period</p></div></div>
+        <app-chart [spec]="a.charts['weekday_distribution']" [height]="260" />
+      </section>
+    </div>
+  } @else if (admissions().loading) {
+    <div class="grid-2">@for (i of [1, 2, 3, 4]; track i) { <div class="card"><div class="chart-skeleton"></div></div> }</div>
+  }
+
+  <section class="card">
+    <div class="card-head"><div><h2>Questions this screen answers</h2><p class="muted">Each opens in AI Analytics</p></div></div>
+    <app-question-list [rows]="questions" />
+  </section>
+</div>
