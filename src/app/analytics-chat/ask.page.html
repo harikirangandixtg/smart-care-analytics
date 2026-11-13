@@ -1,0 +1,106 @@
+<div class="ask">
+  <!-- Conversation: POST /api/analytics/ask, then /followup with conversationId -->
+  <section class="chat" aria-label="Conversation">
+    <div class="chat-head">
+      <div>
+        <h2>Ask analytics</h2>
+        <p class="muted">Answers use only your permitted hospitals</p>
+      </div>
+      @if (messages().length) {
+        <button type="button" class="btn btn-small" (click)="newConversation()">New question</button>
+      }
+    </div>
+
+    <div class="thread" #thread aria-live="polite">
+      @for (m of messages(); track $index) {
+        <div class="bubble" [class.user]="m.role === 'user'" [class.warn]="m.tone === 'warn'">
+          <p>{{ m.text }}</p>
+          @if (m.tags?.length) {
+            <div class="tags">@for (t of m.tags; track t) { <span>{{ t }}</span> }</div>
+          }
+        </div>
+      } @empty {
+        <div class="empty">
+          <p class="muted">Try one of these:</p>
+          @for (s of suggestions; track s) {
+            <button type="button" class="suggestion" (click)="send(s)">{{ s }}</button>
+          }
+        </div>
+      }
+      @if (busy()) { <div class="bubble typing" aria-label="Working on it"><span></span><span></span><span></span></div> }
+
+      @if (conversationId() && result() && !busy()) {
+        <div class="next">
+          <span class="muted small">Try next</span>
+          <div class="next-row">
+            @for (f of followups(); track f) { <button type="button" class="chip-btn" (click)="send(f)">{{ f }}</button> }
+          </div>
+        </div>
+      }
+    </div>
+
+    <form class="composer" (submit)="$event.preventDefault(); send()">
+      <label class="field grow">Your question
+        <input type="text" [value]="draft()" (input)="draft.set($any($event.target).value)" maxlength="500"
+               placeholder="e.g. Which payers have the highest denial rate?" [disabled]="busy()" />
+      </label>
+      <button type="submit" class="btn btn-primary icon" aria-label="Send question" [disabled]="busy() || !draft().trim()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
+      </button>
+    </form>
+  </section>
+
+  <!-- Result of the latest successful answer -->
+  <div class="result">
+    @if (result(); as r) {
+      <header class="page-header">
+        <div>
+          <h1>{{ r.chart?.title ?? r.metricLabel }}</h1>
+          <p class="muted">Answer to your latest question · ran in {{ ((r.executionTimeMs ?? 0) / 1000).toFixed(2) }} s</p>
+        </div>
+      </header>
+
+      <div class="chips">
+        <span class="muted small strong">Showing</span>
+        <span class="chip chip-strong">Metric: {{ r.metricLabel }}</span>
+        @for (c of chips(); track c[0]) { <span class="chip">{{ c[0] }}: {{ c[1] }}</span> }
+      </div>
+
+      @if (r.status === 'no_data') {
+        <div class="card"><p class="body-text">{{ r.message }}</p></div>
+      } @else if (r.chart; as spec) {
+        <section class="card">
+          <div class="card-head">
+            <h2>{{ spec.title }}</h2>
+            <div class="row-gap">
+              <div class="segmented" role="group" aria-label="View">
+                <button type="button" [attr.aria-pressed]="view() === 'chart'" (click)="view.set('chart')">Chart</button>
+                <button type="button" [attr.aria-pressed]="view() === 'table'" (click)="view.set('table')">Table</button>
+              </div>
+              <button type="button" class="btn btn-small" (click)="exportCsv()">Export CSV</button>
+            </div>
+          </div>
+          <app-chart [spec]="spec" [view]="view()" [height]="320" />
+        </section>
+
+        <section class="card">
+          <h2>Insight</h2>
+          <p class="body-text">{{ r.insight }}</p>
+          @if (facts().length) {
+            <div class="facts">
+              @for (f of facts(); track f[0]) {
+                <div class="fact"><span class="muted small">{{ f[0] }}</span><strong>{{ f[1] }}</strong></div>
+              }
+            </div>
+          }
+          <p class="caveat">Based only on the returned figures. Groups with fewer than 11 records are hidden. Not for clinical decisions.</p>
+        </section>
+      }
+    } @else {
+      <div class="result-empty">
+        <h1>Ask a question about admissions, claims or length of stay</h1>
+        <p class="muted">The chart, the figures behind it and a short explanation will appear here. Follow-ups like “Now show only Cardiology” keep your earlier filters.</p>
+      </div>
+    }
+  </div>
+</div>
