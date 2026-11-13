@@ -91,8 +91,8 @@ src/app/
 
 ## Notes
 
-- **Logo:** replace `public/xt-global-logo.svg` with the real XT Global logo
-  (a light version suits the dark sidebar). No code change needed.
+- **Logo:** `public/xt-global-logo.png` is cut from a screenshot; replace it with
+  the original high-resolution file (same name). It sits on a light panel in the sidebar.
 - **Auth:** add an Entra ID (MSAL) interceptor in `app.config.ts` next to the
   mock interceptor when wiring the real API.
 - **Mock `/ask`:** a keyword-based stand-in so the chat can be demoed. It
