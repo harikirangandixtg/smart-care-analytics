@@ -1,39 +1,80 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, filter, switchMap, take, takeWhile, throwError, timer } from 'rxjs';
+import { Observable, filter, map, switchMap, take, takeWhile, throwError, timer } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { ExportRequest, ReportResponse } from '../models/api.models';
+import { ExportRequest, ReportResponse, ReportStatus } from '../models/api.models';
 
-/** /api/reports/* — request an export, poll until completed, then download the file. */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const STATUS: Record<string, ReportStatus> = {
+  queued: 'queued', pending: 'queued', created: 'queued', accepted: 'queued',
+  processing: 'processing', running: 'processing', in_progress: 'processing',
+  completed: 'completed', complete: 'completed', done: 'completed', success: 'completed', succeeded: 'completed', ready: 'completed', ok: 'completed',
+  failed: 'failed', error: 'failed', expired: 'failed',
+};
+
+/** The OpenAPI response is an open object: accept id / report_id, file / file_name, message / error, etc. */
+export function normalizeReport(raw: any, fallback?: Partial<ReportResponse>): ReportResponse {
+  const r = raw ?? {};
+  return {
+    ...fallback,
+    report_id: r.report_id ?? r.id ?? fallback?.report_id ?? '',
+    status: STATUS[String(r.status ?? '').toLowerCase()] ?? fallback?.status ?? 'queued',
+    format: r.format ?? fallback?.format ?? 'csv',
+    file_name: r.file_name ?? r.filename ?? r.file ?? fallback?.file_name,
+    created_at: r.created_at ?? fallback?.created_at ?? new Date().toISOString(),
+    completed_at: r.completed_at ?? r.finished_at ?? fallback?.completed_at,
+    expires_at: r.expires_at ?? r.download_expires_at ?? fallback?.expires_at,
+    row_count: r.row_count ?? r.rows ?? fallback?.row_count,
+    size_bytes: r.size_bytes ?? r.size ?? fallback?.size_bytes,
+    error: r.error ?? r.message ?? (r.status === 'failed' ? r.detail : null) ?? null,
+  };
+}
+
+/** /api/reports/* — request an export, poll its status, download the file. */
 @Injectable({ providedIn: 'root' })
 export class ReportService {
   private readonly http = inject(HttpClient);
   private readonly base = `${environment.apiBaseUrl}/api/reports`;
 
   export(req: ExportRequest): Observable<ReportResponse> {
-    return this.http.post<ReportResponse>(`${this.base}/export`, { format: 'csv', ...req });
+    const body = { format: 'csv', ...req };
+    return this.http.post(`${this.base}/export`, body).pipe(map(r => normalizeReport(r, { format: body.format as 'csv' | 'json' })));
   }
 
-  status(reportId: string): Observable<ReportResponse> {
-    return this.http.get<ReportResponse>(`${this.base}/${encodeURIComponent(reportId)}`);
+  status(reportId: string, known?: ReportResponse): Observable<ReportResponse> {
+    return this.http.get(`${this.base}/${encodeURIComponent(reportId)}`).pipe(map(r => normalizeReport(r, known)));
   }
 
-  file(reportId: string): Observable<Blob> {
-    return this.http.get(`${this.base}/${encodeURIComponent(reportId)}`, { params: { download: true }, responseType: 'blob' });
+  /** Polls every second (up to 60 tries) and emits each status; completes on completed / failed. */
+  watch(first: ReportResponse): Observable<ReportResponse> {
+    if (first.status === 'completed' || first.status === 'failed') return new Observable(s => { s.next(first); s.complete(); });
+    return timer(0, 1000).pipe(
+      take(60),
+      switchMap(() => this.status(first.report_id, first)),
+      takeWhile(r => r.status !== 'completed' && r.status !== 'failed', true),
+    );
   }
 
-  /** Export → poll status (1 s, up to 30 tries) → download blob. */
+  /** GET /api/reports/{id}?download=true. Uses the server's file name from Content-Disposition when sent. */
+  download(report: ReportResponse): Observable<{ blob: Blob; fileName: string }> {
+    return this.http.get(`${this.base}/${encodeURIComponent(report.report_id)}`, { params: { download: true }, responseType: 'blob', observe: 'response' }).pipe(
+      map((res: HttpResponse<Blob>) => {
+        const cd = res.headers.get('content-disposition') ?? '';
+        const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
+        return { blob: res.body ?? new Blob(), fileName: m ? decodeURIComponent(m[1]) : report.file_name ?? `report-${report.report_id.slice(0, 8)}.${report.format}` };
+      }),
+    );
+  }
+
+  /** Export → poll → download blob (used by AI Analytics' one-click export). */
   exportAndDownload(req: ExportRequest): Observable<{ blob: Blob; report: ReportResponse }> {
     return this.export(req).pipe(
-      switchMap(first => first.status === 'completed' ? [first] : timer(0, 1000).pipe(
-        switchMap(() => this.status(first.report_id)),
-        takeWhile(r => r.status !== 'completed' && r.status !== 'failed', true),
-        filter(r => r.status === 'completed' || r.status === 'failed'),
-        take(1),
-      )),
+      switchMap(first => this.watch(first)),
+      filter(r => r.status === 'completed' || r.status === 'failed'),
+      take(1),
       switchMap(r => r.status === 'failed'
         ? throwError(() => new Error(r.error ?? 'The export failed.'))
-        : this.file(r.report_id).pipe(switchMap(blob => [{ blob, report: r }]))),
+        : this.download(r).pipe(map(({ blob, fileName }) => ({ blob, report: { ...r, file_name: fileName } })))),
     );
   }
 
@@ -42,6 +83,6 @@ export class ReportService {
     const url = URL.createObjectURL(blob);
     const a = Object.assign(document.createElement('a'), { href: url, download: fileName });
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 }

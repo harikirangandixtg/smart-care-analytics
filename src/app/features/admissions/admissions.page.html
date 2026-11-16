@@ -5,10 +5,14 @@
 
   @if (admissions().error; as err) { <div class="alert">{{ err }}</div> }
 
-  <section class="stat-grid" aria-label="Admission totals">
+  <section class="stat-grid" appBalancedGrid="180" aria-label="Admission totals">
     @if (admissions().data?.totals; as t) {
       <app-stat-card label="Total admissions" [value]="(t.total_admissions | number) ?? ''" note="Selected period" />
-      <app-stat-card label="Admissions per day" [value]="(t.admissions_per_day | number: '1.1-1') ?? ''" note="Average across the period" />
+      @if (t.unique_patients !== null && t.unique_patients !== undefined) {
+        <app-stat-card label="Unique patients" [value]="(t.unique_patients | number) ?? ''" note="Distinct patients admitted" />
+      } @else if (t.admissions_per_day !== null) {
+        <app-stat-card label="Admissions per day" [value]="(t.admissions_per_day | number: '1.1-1') ?? ''" note="Average across the period" />
+      }
       <app-stat-card label="Avg length of stay" [value]="(t.avg_los_days | number: '1.1-1') + ' days'" note="Admission to discharge" accent="#C8661C" />
       <app-stat-card label="Busiest department" [value]="t.top_department?.name ?? '—'" [note]="t.top_department ? (t.top_department.admissions | number) + ' admissions · ' + t.top_department.share + '%' : ''" />
       <app-stat-card label="Peak month" [value]="t.peak_period ? t.peak_period.label : '—'" [note]="t.peak_period ? (t.peak_period.admissions | number) + ' admissions' : ''" />
@@ -45,6 +49,7 @@
       @else { <div class="chart-skeleton"></div> }
     </section>
 
+    @if (a.charts?.['daily_trend'] || a.charts?.['weekday_distribution']) {
     <div class="grid-3-2">
       <section class="card">
         <div class="card-head"><div><h2>Admission trend by date</h2><p class="muted">{{ a.charts?.['daily_trend']?.title }}</p></div></div>
@@ -55,6 +60,7 @@
         <app-chart [spec]="a.charts?.['weekday_distribution']" [height]="260" />
       </section>
     </div>
+    }
   } @else if (admissions().loading) {
     <div class="grid-2">@for (i of [1, 2, 3, 4]; track i) { <div class="card"><div class="chart-skeleton"></div></div> }</div>
   }

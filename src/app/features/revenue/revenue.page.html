@@ -10,7 +10,7 @@
 
   @if (revenue().error; as err) { <div class="alert">{{ err }}</div> }
 
-  <section class="stat-grid stat-grid-4" aria-label="Claim amount totals">
+  <section class="stat-grid stat-grid-4" appBalancedGrid="220" aria-label="Claim amount totals">
     @if (revenue().data?.totals; as t) {
       <app-stat-card label="Submitted claim amount" [value]="inr(t.submitted_amount)" note="Billed to payers · not revenue" accent="#A9C6E8" />
       <app-stat-card label="Paid amount" [value]="t.paid_amount === null ? 'Not available' : inr(t.paid_amount)" [note]="t.paid_amount === null ? 'No payment data in this source' : pct(t.paid_amount, t.submitted_amount) + ' of submitted · recognised revenue'" />
@@ -38,7 +38,7 @@
       <!-- GET /api/dashboard/hospitals -->
       <section class="card">
         <div class="card-head"><div><h2>Revenue by hospital</h2><p class="muted">Submitted claim amount vs paid</p></div><span class="ask-hint">Ask: “Compare revenue between hospitals”</span></div>
-        @if (hospitals().error) { <div class="alert">{{ hospitals().error }}</div> } @else { <app-chart [spec]="hospitalChart()" [height]="260" /> }
+        @if (hospitalChart()) { <app-chart [spec]="hospitalChart()" [height]="300" /> } @else if (hospitals().error) { <div class="alert">{{ hospitals().error }}</div> } @else { <div class="chart-skeleton"></div> }
       </section>
       <section class="card">
         <div class="card-head"><div><h2>Where the claim amount stands</h2><p class="muted">Total claim amount by outcome</p></div></div>
@@ -52,8 +52,8 @@
   <!-- GET /api/dashboard/departments -->
   <section class="card">
     <div class="card-head"><div><h2>Revenue by department</h2><p class="muted">Submitted claim amount vs paid, highest first</p></div><span class="ask-hint">Ask: “Which department generates the highest claim amount?”</span></div>
-    @if (departments().error) { <div class="alert">{{ departments().error }}</div> }
-    @else if (departments().data) { <app-chart [spec]="departmentChart()" [height]="300" /> }
+    @if (departmentChart()) { <app-chart [spec]="departmentChart()" [height]="300" /> }
+    @else if (departments().error) { <div class="alert">{{ departments().error }}</div> }
     @else { <div class="chart-skeleton"></div> }
   </section>
 

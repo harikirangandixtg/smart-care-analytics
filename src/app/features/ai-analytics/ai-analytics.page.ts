@@ -56,13 +56,27 @@ export class AiAnalyticsPage implements OnInit {
     const qp = this.route.snapshot.queryParamMap;
     const conv = qp.get('conversation');
     const q = qp.get('q');
-    if (conv) {
+    const resultId = qp.get('result');
+    if (resultId) {
+      // Opened from AI Insights: show that exact result (GET /api/analytics/{query_id}) and continue its conversation.
+      this.busy.set(true);
+      this.api.result(resultId).subscribe({
+        next: res => {
+          this.conversationId.set(res.conversation_id ?? null);
+          this.push({ role: 'user', text: res.question || q || 'Insight' });
+          if (res.status === 'success' || res.status === 'no_data') { this.result.set(res); this.view.set('chart'); }
+          this.push({ role: 'assistant', text: res.insight ?? res.message ?? 'Done.', tone: res.status === 'success' ? 'normal' : 'warn', tags: Object.values(res.applied_filters ?? {}).slice(0, 3) });
+          this.busy.set(false);
+        },
+        error: err => { this.push({ role: 'assistant', text: errorMessage(err), tone: 'warn' }); this.busy.set(false); },
+      });
+    } else if (conv) {
       this.conversationId.set(conv);
       this.messages.set([{ role: 'assistant', text: `Continuing your earlier question${q ? `: “${q}”` : ''}. Ask a follow-up.` }]);
     } else if (q) {
       queueMicrotask(() => this.send(q));
     }
-    if (conv || q) this.router.navigate([], { queryParams: {}, replaceUrl: true });
+    if (conv || q || resultId) this.router.navigate([], { queryParams: {}, replaceUrl: true });
   }
 
   protected send(text = this.draft()): void {

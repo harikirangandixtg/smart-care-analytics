@@ -85,6 +85,19 @@ function reportStatus(id: string, download: boolean) {
   return pub;
 }
 
+// ------------------------------------------------------------------- agents
+const MOCK_AGENTS = [
+  { name: 'analytics-planner', version: '1.0.0', sha256: 'c4ea1292bda7', file: 'agents/analytics-planner.md', description: 'Turns a question into a structured analytics plan: metric, dimensions, period and filters.', instructions: '---\nname: analytics-planner\nversion: 1.0.0\n---\n# Analytics Planner\n\nIdentify the metric, dimensions, period and filters in the question.\nReturn a JSON plan only. Ask for clarification when the metric is ambiguous.\n' },
+  { name: 'sql-drafter', version: '1.0.0', sha256: '4f47966eba47', file: 'agents/sql-drafter.md', description: 'Drafts a PostgreSQL query from the plan using the approved schema only.', instructions: '---\nname: sql-drafter\nversion: 1.0.0\n---\n# SQL Drafter\n\nWrite one SELECT statement against the approved views. Never write DML or DDL.\n' },
+  { name: 'insights-writer', version: '1.0.0', sha256: 'ad43087ee93c', file: 'agents/insights-writer.md', description: 'Explains the aggregate rows that came back, without inventing numbers.', instructions: '---\nname: insights-writer\nversion: 1.0.0\n---\n# Insights Writer\n\nSummarise only the returned rows. State the definition used and any caveats.\n' },
+  { name: 'chart-advisor', version: '1.0.0', sha256: 'ab3876d99d44', file: 'agents/chart-advisor.md', description: 'Chooses a chart type and returns JSON matching the frontend chart contract.', instructions: '---\nname: chart-advisor\nversion: 1.0.0\n---\n# Chart Advisor\n\nPick line for time, bar for categories, table when unsure. Return the chart spec JSON.\n' },
+];
+function agent(name: string) {
+  const a = MOCK_AGENTS.find(x => x.name === name);
+  if (!a) throw new MockError(404, `Agent '${name}' not found.`);
+  return a;
+}
+
 // ------------------------------------------------------------------ routes
 const ROUTES: { method: string; path: RegExp; handle: Handler; status?: number }[] = [
   { method: 'GET', path: /^\/api\/health$/, handle: () => ({ status: 'ok', mode: 'mock' }) },
@@ -112,7 +125,17 @@ const ROUTES: { method: string; path: RegExp; handle: Handler; status?: number }
   { method: 'POST', path: /^\/api\/reports\/export$/, handle: r => exportReport(r.body as ExportRequest), status: 201 },
   { method: 'GET', path: /^\/api\/reports\/([^/]+)$/, handle: (_r, q, m) => reportStatus(decodeURIComponent(m[1]), q.get('download') === 'true') },
 
-  { method: 'GET', path: /^\/api\/agents$/, handle: () => ({ items: ['analytics_planner', 'sql_generator', 'insights_agent', 'chart_formatter'].map(name => ({ name, version: '1.0.0', status: 'loaded' })) }) },
+  { method: 'GET', path: /^\/api\/agents$/, handle: () => ({ items: MOCK_AGENTS.map(({ instructions: _i, ...a }) => a) }) },
+  { method: 'GET', path: /^\/api\/agents\/([a-z0-9-]+)$/, handle: (_r, _q, m) => { const { instructions: _i, ...a } = agent(m[1]); return a; } },
+  { method: 'GET', path: /^\/api\/agents\/([a-z0-9-]+)\/instructions$/, handle: (_r, _q, m) => { const a = agent(m[1]); return { name: a.name, file: a.file, version: a.version, sha256: a.sha256, content: a.instructions }; } },
+  { method: 'POST', path: /^\/api\/agents\/([a-z0-9-]+)\/execute$/, handle: (r, _q, m) => {
+    const a = agent(m[1]); const inputs = (r.body as { inputs?: Record<string, unknown> })?.inputs ?? {};
+    const q = String(inputs['question'] ?? '');
+    const output = a.name === 'analytics-planner'
+      ? { metric: /denial/i.test(q) ? 'denial_rate' : 'admissions', group_by: /payer/i.test(q) ? 'payer' : null, period: { relative: 'last_2_months' }, filters: {}, chart_hint: 'bar' }
+      : { echo: inputs, note: 'Mock output' };
+    return { agent: a.name, status: 'ok', duration_ms: 600 + Math.round(Math.random() * 900), request_id: crypto.randomUUID().replace(/-/g, ''), output };
+  } },
 ];
 
 /**

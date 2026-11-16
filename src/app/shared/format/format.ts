@@ -2,8 +2,9 @@ import { KpiUnit } from '../../core/models/api.models';
 
 /** ₹ in crore above 1 Cr, lakh above 1 L, else rupees (Indian grouping). */
 export function inr(v: number): string {
-  if (Math.abs(v) >= 1e7) return `₹${(v / 1e7).toFixed(1)} Cr`;
-  if (Math.abs(v) >= 1e5) return `₹${(v / 1e5).toFixed(1)} L`;
+  const one = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  if (Math.abs(v) >= 1e7) return `₹${one(v / 1e7)} Cr`;
+  if (Math.abs(v) >= 1e5) return `₹${one(v / 1e5)} L`;
   return `₹${Math.round(v).toLocaleString('en-IN')}`;
 }
 

@@ -5,7 +5,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
   selector: 'app-stat-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="stat-card">
+    <div class="stat-card" [title]="label() + ': ' + value() + (note() ? '\n' + note() : '')">
       <span class="stat-accent" [style.background]="accent()"></span>
       <div class="stat-body">
         <span class="stat-label">{{ label() }}</span>

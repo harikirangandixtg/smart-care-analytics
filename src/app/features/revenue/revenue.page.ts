@@ -1,3 +1,4 @@
+import { BalancedGridDirective } from '../../shared/balanced-grid.directive';
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { DimensionResponse, VisualizationSpec } from '../../core/models/api.models';
 import { DashboardService } from '../../core/services/dashboard.service';
@@ -27,7 +28,7 @@ function submittedVsPaid(res: DimensionResponse | undefined, title: string, key:
 /** Screen 4 — claim amounts by outcome. APIs: GET /api/dashboard/revenue, /hospitals, /departments. */
 @Component({
   selector: 'app-revenue-page',
-  imports: [ChartComponent, FilterBarComponent, PageHeaderComponent, QuestionListComponent, StatCardComponent],
+  imports: [BalancedGridDirective, ChartComponent, FilterBarComponent, PageHeaderComponent, QuestionListComponent, StatCardComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './revenue.page.html',
 })
@@ -41,8 +42,8 @@ export class RevenuePage {
   protected readonly hospitals = requestState(this.store.filters, f => this.api.hospitals(f));
   protected readonly departments = requestState(this.store.filters, f => this.api.departments(f));
 
-  protected readonly hospitalChart = computed(() => submittedVsPaid(this.hospitals().data, 'Submitted vs paid by hospital (₹ Cr)', 'hospital', true));
-  protected readonly departmentChart = computed(() => submittedVsPaid(this.departments().data, 'Submitted vs paid by department (₹ Cr)', 'department', false));
+  protected readonly hospitalChart = computed(() => this.revenue().data?.charts?.['by_hospital'] ?? submittedVsPaid(this.hospitals().data, 'Submitted vs paid by hospital (₹ Cr)', 'hospital', true));
+  protected readonly departmentChart = computed(() => this.revenue().data?.charts?.['by_department'] ?? submittedVsPaid(this.departments().data, 'Submitted vs paid by department (₹ Cr)', 'department', false));
 
   protected readonly questions = [
     { question: 'Show pending claim amounts by payer', shownAs: 'Horizontal bar chart' },

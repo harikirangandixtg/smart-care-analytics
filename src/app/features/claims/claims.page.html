@@ -5,7 +5,7 @@
 
   @if (claims().error; as err) { <div class="alert">{{ err }}</div> }
 
-  <section class="stat-grid" aria-label="Claim totals">
+  <section class="stat-grid" appBalancedGrid="180" aria-label="Claim totals">
     @if (claims().data?.totals; as t) {
       <app-stat-card label="Total claims" [value]="(t.total_claims | number) ?? ''" note="Selected period" accent="#A9C6E8" />
       <app-stat-card label="Approved claims" [value]="(t.approved_claims | number) ?? ''" [note]="pct(t.approved_claims, t.total_claims) + ' · paid by payers'" />
@@ -26,9 +26,9 @@
     </section>
     <!-- GET /api/dashboard/trends?metric=denial_rate -->
     <section class="card">
-      <div class="card-head"><div><h2>Monthly denial rate</h2><p class="muted">Denied ÷ all claims · dashed line = target</p></div></div>
-      @if (trend().data; as t) { <app-chart [spec]="t.chart" [height]="260" /> }
-      @else if (trend().error) { <div class="alert">{{ trend().error }}</div> }
+      <div class="card-head"><div><h2>Monthly denial rate</h2><p class="muted">{{ denials().data?.definition ?? 'Denied ÷ all claims' }} · dashed line = target</p></div></div>
+      @if (denialTrend()) { <app-chart [spec]="denialTrend()" [height]="260" /> }
+      @else if (trend().error && denials().error) { <div class="alert">{{ trend().error }}</div> }
       @else { <div class="chart-skeleton"></div> }
     </section>
   </div>
@@ -48,14 +48,14 @@
                   <td class="strong">{{ p.payer_name }}</td>
                   <td class="num">{{ p.total_claims | number }}</td>
                   <td class="num">{{ p.denied_claims | number }}</td>
-                  <td class="num">{{ p.pending_claims | number }}</td>
+                  <td class="num">{{ (p.pending_claims ?? claims().data?.pending_by_payer?.[p.payer_id] ?? null) === null ? '—' : ((p.pending_claims ?? claims().data?.pending_by_payer?.[p.payer_id]) | number) }}</td>
                   <td class="num nowrap">
                     <span class="rate-bar" [class.hot]="p.denial_rate > (d.totals?.target_rate ?? 999) * 2" [style.width.px]="p.denial_rate * 4"></span>
                     <span class="strong" [class.text-warn]="p.denial_rate > (d.totals?.target_rate ?? 999) * 2">{{ p.denial_rate }}%</span>
                   </td>
                 </tr>
               }
-              <tr class="total-row"><td>All payers</td><td class="num">{{ d.totals?.eligible_claims | number }}</td><td class="num">{{ d.totals?.denied_claims | number }}</td><td class="num">—</td><td class="num">{{ d.totals?.denial_rate }}%</td></tr>
+              <tr class="total-row"><td>All payers</td><td class="num">{{ d.totals?.eligible_claims | number }}</td><td class="num">{{ d.totals?.denied_claims | number }}</td><td class="num">{{ (claims().data?.totals?.pending_claims | number) ?? '—' }}</td><td class="num">{{ d.totals?.denial_rate }}%</td></tr>
             </tbody>
           </table>
         </div>
@@ -71,15 +71,20 @@
       @if (denials().data; as d) { <app-chart [spec]="d.charts?.['by_reason']" [height]="280" /> } @else if (!denials().error) { <div class="chart-skeleton"></div> }
     </section>
     <section class="card">
-      <div class="card-head"><div><h2>Reason codes</h2><p class="muted">Frequency and share of denials</p></div></div>
+      <div class="card-head"><div><h2>Denial reasons in detail</h2><p class="muted">Frequency, share and denied amount</p></div></div>
       @if (denials().data; as d) {
         <div class="table-wrap">
           <table class="table">
-            <thead><tr><th scope="col">Code</th><th scope="col">Description</th><th scope="col" class="num">Denials</th></tr></thead>
+            <thead><tr><th scope="col">Reason</th><th scope="col" class="num">Denials</th><th scope="col" class="num">Share</th><th scope="col" class="num">Denied amount</th></tr></thead>
             <tbody>
               @for (r of d.reasons ?? []; track r.code) {
-                <tr><td class="mono strong nowrap">{{ r.code }}</td><td>{{ r.description }}</td><td class="num nowrap">{{ r.count | number }} · {{ r.share }}%</td></tr>
-              } @empty { <tr><td colspan="3" class="muted">No denials in this period.</td></tr> }
+                <tr>
+                  <td><span class="strong">{{ r.code }}</span>@if (r.description) { <div class="muted small">{{ r.description }}</div> }</td>
+                  <td class="num nowrap">{{ r.count | number }}</td>
+                  <td class="num nowrap">{{ r.share }}%</td>
+                  <td class="num nowrap">{{ r.amount !== null && r.amount !== undefined ? inr(r.amount) : '—' }}</td>
+                </tr>
+              } @empty { <tr><td colspan="4" class="muted">No denials in this period.</td></tr> }
             </tbody>
           </table>
         </div>
@@ -91,14 +96,14 @@
       @if (denials().data; as d) { <app-chart [spec]="d.charts?.['by_department']" [height]="300" /> } @else if (!denials().error) { <div class="chart-skeleton"></div> }
     </section>
     <section class="card">
-      <div class="card-head"><div><h2>Pending claims aging</h2><p class="muted">{{ (claims().data?.totals?.pending_claims ?? 0) | number }} pending claims by days since submission</p></div></div>
+      <div class="card-head"><div><h2>Pending claims aging</h2><p class="muted">{{ (claims().data?.totals?.pending_claims ?? 0) | number }} pending claims by days pending</p></div></div>
       @if (claims().data; as c) { <app-chart [spec]="c.charts?.['pending_aging']" [height]="300" /> } @else { <div class="chart-skeleton"></div> }
     </section>
   </div>
 
   <!-- GET /api/dashboard/claims?claim_status=Pending&limit=8&offset=n -->
   <section class="card">
-    <div class="card-head"><div><h2>Pending claims, oldest first</h2><p class="muted">Aggregate claim details only · no patient identifiers</p></div><span class="ask-hint">Ask: “Show pending claims older than 30 days”</span></div>
+    <div class="card-head"><div><h2>Pending claims older than 30 days</h2><p class="muted">{{ (claims().data?.totals?.pending_over_30_days ?? 0) | number }} claims · no patient identifiers</p></div><span class="ask-hint">Ask: “Show pending claims older than 30 days”</span></div>
     @if (pending().data; as p) {
       <div class="table-wrap">
         <table class="table">

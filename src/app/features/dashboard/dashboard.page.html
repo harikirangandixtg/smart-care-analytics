@@ -1,18 +1,13 @@
 <div class="page">
   <app-page-header title="Dashboard" description="Admissions, claim amounts and denials for your permitted hospitals" [updated]="summary().loadedAt">
-    <app-filter-bar [department]="true" [payer]="true">
-      <a routerLink="/ai-analytics" class="btn btn-primary">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
-        Ask a question
-      </a>
-    </app-filter-bar>
+    <app-filter-bar [department]="true" [payer]="true" />
   </app-page-header>
 
   <!-- GET /api/dashboard/summary -->
   @if (summary().error; as err) { <div class="alert">{{ err }} <button type="button" class="link-btn" (click)="store.refresh()">Retry</button></div> }
-  <section class="kpi-grid" aria-label="Key figures" [attr.aria-busy]="summary().loading">
+  <section class="kpi-grid" appBalancedGrid="170" aria-label="Key figures" [attr.aria-busy]="summary().loading">
     @if (summary().data; as s) {
-      @for (k of s.kpis ?? []; track k.key) {
+      @for (k of kpis(); track k.key) {
         <a class="kpi-link" [routerLink]="kpiLink[k.key] ?? null" [attr.aria-label]="k.label + ': open details'"><app-kpi-card [kpi]="k" [comparison]="s.comparison_label ?? ''" /></a>
       }
     } @else if (summary().loading) {

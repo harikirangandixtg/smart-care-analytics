@@ -1,4 +1,5 @@
 import { HttpInterceptorFn } from '@angular/common/http';
+import { environment } from '../../../environments/environment';
 
 const KEY = 'sca-session-id';
 
@@ -20,5 +21,8 @@ function sessionId(): string {
 export const sessionInterceptor: HttpInterceptorFn = (req, next) => {
   const headers: Record<string, string> = { 'x-correlation-id': crypto.randomUUID() };
   if (/\/api\/(analytics|reports)\//.test(req.url)) headers['x-session-id'] = sessionId();
+  if (/\/api\/agents(\/|$)/.test(req.url.split('?')[0])) {
+    if (environment.adminKey) headers['x-admin-key'] = environment.adminKey;
+  }
   return next(req.clone({ setHeaders: headers }));
 };

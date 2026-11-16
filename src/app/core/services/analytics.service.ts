@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AskRequest, AskResponse, FollowupRequest, HistoryResponse } from '../models/api.models';
-import { normalizeAsk } from './ask-adapter';
+import { normalizeAsk, normalizeHistory } from './ask-adapter';
 
 /** /api/analytics/* — the x-session-id header is added by sessionInterceptor. */
 @Injectable({ providedIn: 'root' })
@@ -21,7 +21,7 @@ export class AnalyticsService {
 
   /** limit 1–50, offset 0–10000 (OpenAPI). No server-side search/status filter exists. */
   history(limit = 50, offset = 0): Observable<HistoryResponse> {
-    return this.http.get<HistoryResponse>(`${this.base}/history`, { params: { limit, offset } });
+    return this.http.get<unknown>(`${this.base}/history`, { params: { limit, offset } }).pipe(map(r => normalizeHistory(r, limit, offset)));
   }
 
   result(queryId: string): Observable<AskResponse> {

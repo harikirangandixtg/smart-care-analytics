@@ -64,7 +64,7 @@ function lineOrBar(spec: VisualizationSpec, kind: 'line' | 'bar'): EChartsCoreOp
   const format = fmt(o.unit);
 
   const catAxis = { type: 'category', data: categories, ...axisCommon, splitLine: { show: false }, ...(horizontal ? { inverse: true, axisLabel: { color: PALETTE.ink, fontSize: 12 } } : {}) };
-  const valAxis = { type: 'value', ...axisCommon, axisLabel: { ...axisCommon.axisLabel, formatter: format }, scale: kind === 'line' };
+  const valAxis = { type: 'value', ...axisCommon, axisLabel: { ...axisCommon.axisLabel, formatter: format, hideOverlap: true }, scale: kind === 'line', splitNumber: 4 };
 
   return {
     ...base(),
@@ -133,7 +133,7 @@ function sankey(spec: VisualizationSpec): EChartsCoreOption {
     ...base(),
     tooltip: { trigger: 'item', valueFormatter: (v: number) => `${v.toLocaleString('en-IN')} claims` },
     series: [{
-      type: 'sankey', left: 100, right: 110, top: 8, bottom: 8, nodeWidth: 14, nodeGap: 12, draggable: false,
+      type: 'sankey', left: 150, right: 110, top: 8, bottom: 8, nodeWidth: 14, nodeGap: 12, draggable: false,
       layoutIterations: 0, // keep the API's order: payers top-down, Paid / Denied / Pending
       emphasis: { focus: 'adjacency' },
       data: names.map(n => ({

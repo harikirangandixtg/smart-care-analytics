@@ -1,3 +1,4 @@
+import { BalancedGridDirective } from '../../shared/balanced-grid.directive';
 import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { DashboardService } from '../../core/services/dashboard.service';
@@ -17,7 +18,7 @@ import { StatCardComponent } from '../../shared/stat-card/stat-card.component';
  */
 @Component({
   selector: 'app-claims-page',
-  imports: [DecimalPipe, ChartComponent, FilterBarComponent, PageHeaderComponent, QuestionListComponent, StatCardComponent],
+  imports: [BalancedGridDirective, DecimalPipe, ChartComponent, FilterBarComponent, PageHeaderComponent, QuestionListComponent, StatCardComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './claims.page.html',
 })
@@ -34,9 +35,15 @@ export class ClaimsPage {
   protected readonly denials = requestState(this.store.filters, f => this.api.denials(f, 8));
   protected readonly trend = requestState(this.store.filters, f => this.api.trends(f, 'denial_rate'));
   protected readonly pending = requestState(
-    computed(() => ({ f: { ...this.store.filters(), claim_status: ['Pending' as const] }, offset: this.offset() })),
+    computed(() => ({ f: this.store.filters(), offset: this.offset() })),
     ({ f, offset }) => this.api.claims(f, this.pageSize, offset),
   );
+
+  /** /trends?metric=denial_rate, or the denials endpoint's own trend when /trends returns nothing. */
+  protected readonly denialTrend = computed(() => {
+    const t = this.trend().data?.chart;
+    return t?.data?.length ? t : this.denials().data?.charts?.['monthly_rate'] ?? t ?? null;
+  });
 
   protected readonly page = computed(() => Math.floor(this.offset() / this.pageSize) + 1);
   protected readonly pages = computed(() => Math.max(1, Math.ceil((this.pending().data?.total ?? 0) / this.pageSize)));

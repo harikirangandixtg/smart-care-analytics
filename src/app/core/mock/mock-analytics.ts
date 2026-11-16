@@ -297,7 +297,8 @@ function run(question: string, conversationId: string | null, hospitalIds: strin
   const execution_time_ms = Math.round(380 + rnd() * 420);
   const query_id = uuid();
   const interp = interpret(question.trim(), conv?.plan, scopeIds);
-  const base = { query_id, conversation_id, question: question.trim(), execution_time_ms, created_at: at.toISOString(), parent_query_id: conv?.lastId ?? null };
+  const meta = { duration_ms: execution_time_ms, request_id: uuid().replace(/-/g, ''), agents: ['analytics-planner', 'sql-drafter', 'insights-writer', 'chart-advisor'].map((name, i) => ({ name, version: '1.0.0', sha256: ['c4ea1292bda7', '4f47966eba47', 'ad43087ee93c', 'ab3876d99d44'][i] })) };
+  const base = { query_id, conversation_id, question: question.trim(), execution_time_ms, created_at: at.toISOString(), parent_query_id: conv?.lastId ?? null, meta };
   let result: AskResponse; let plan: Plan | undefined;
 
   if (interp.kind === 'reject') {

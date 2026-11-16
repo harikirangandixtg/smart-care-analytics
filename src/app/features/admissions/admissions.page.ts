@@ -1,3 +1,4 @@
+import { BalancedGridDirective } from '../../shared/balanced-grid.directive';
 import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { DashboardService } from '../../core/services/dashboard.service';
@@ -12,7 +13,7 @@ import { StatCardComponent } from '../../shared/stat-card/stat-card.component';
 /** Screen 3 — admission patterns. APIs: GET /api/dashboard/admissions, GET /api/dashboard/trends?group_by=department. */
 @Component({
   selector: 'app-admissions-page',
-  imports: [DecimalPipe, ChartComponent, FilterBarComponent, PageHeaderComponent, QuestionListComponent, StatCardComponent],
+  imports: [BalancedGridDirective, DecimalPipe, ChartComponent, FilterBarComponent, PageHeaderComponent, QuestionListComponent, StatCardComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './admissions.page.html',
 })

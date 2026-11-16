@@ -1,0 +1,163 @@
+<div class="page">
+  <app-page-header title="AI Insights" description="Short observations from analytics results: key findings, comparisons and unusual changes" [refreshable]="false">
+    <app-filter-bar [department]="true" [payer]="true" />
+  </app-page-header>
+
+  <!-- Grounding rule, always visible -->
+  <div class="rule" role="note">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z" /><path d="M9 12l2 2 4-4" /></svg>
+    <p><strong>Grounded in query results.</strong> Each finding is written by the Insights Agent from the rows its query returned.
+      Every figure is checked against those rows, comparisons and flags are calculated from the same rows, and flagged changes are
+      for investigation only. No causes or clinical recommendations are given.</p>
+  </div>
+
+  <section class="card toolbar">
+    <div class="tb-main">
+      <div>
+        <h2>{{ store.ranWith() ? 'Insights for your selection' : 'Generate insights' }}</h2>
+        <p class="muted small">
+          @if (store.ranWith(); as r) { Generated {{ r.at | date: 'd MMM, HH:mm' }} · {{ progress().done }} of {{ progress().total }} answered }
+          @else { Runs {{ store.items().length }} standard questions for the period and filters above. Each takes a few seconds. }
+        </p>
+      </div>
+      <div class="tb-actions">
+        @if (running()) { <button type="button" class="btn" (click)="store.cancel()">Stop</button> }
+        <button type="button" class="btn btn-primary" (click)="generate()" [disabled]="running()">
+          {{ running() ? 'Generating… ' + progress().done + '/' + progress().total : store.ranWith() ? 'Regenerate' : 'Generate insights' }}
+        </button>
+      </div>
+    </div>
+    @if (stale() && !running()) {
+      <div class="alert soft">The filters changed since these insights were generated. Select <strong>Regenerate</strong> to update them.</div>
+    }
+    <form class="ask" (submit)="$event.preventDefault(); addQuestion()">
+      <label for="own-q" class="sr-only">Add your own insight question</label>
+      <input id="own-q" type="text" maxlength="500" placeholder="Add a question, e.g. Which departments have the highest denial rate?" [value]="draft()" (input)="draft.set($any($event.target).value)" />
+      <button type="submit" class="btn" [disabled]="!draft().trim()">Add insight</button>
+    </form>
+    @if (totals().findings) {
+      <div class="chips">
+        <span class="chip">{{ totals().findings }} findings</span>
+        <span class="chip" [class.warn]="totals().flagged">{{ totals().flagged }} flagged for review</span>
+        <span class="chip ok">{{ totals().grounded }} with all figures verified</span>
+        @if (totals().notGrounded) { <span class="chip warn">{{ totals().notGrounded }} need checking</span> }
+      </div>
+    }
+  </section>
+
+  <div class="cards">
+    @for (c of cards(); track c.state.topic.id) {
+      <article class="card insight" [attr.aria-busy]="c.state.status === 'loading'">
+        <header class="i-head">
+          <div>
+            <span class="eyebrow">{{ c.state.topic.title }}</span>
+            <h3>{{ c.res?.metric_label ?? c.state.topic.question }}</h3>
+            <p class="muted small q">“{{ c.state.topic.question }}”</p>
+          </div>
+          <div class="i-tools">
+            @if (c.state.status === 'done' || c.state.status === 'error') {
+              <button type="button" class="icon-btn" (click)="store.rerun(c.state.topic.id)" title="Run again" aria-label="Run again">↻</button>
+            }
+            @if (c.state.topic.custom) { <button type="button" class="icon-btn" (click)="store.remove(c.state.topic.id)" title="Remove" aria-label="Remove">✕</button> }
+          </div>
+        </header>
+
+        @switch (c.state.status) {
+          @case ('idle') { <p class="muted small">Not generated yet.</p> }
+          @case ('queued') { <p class="muted small">Waiting…</p><div class="line-skel"></div> }
+          @case ('loading') { <div class="line-skel"></div><div class="line-skel short"></div><p class="muted small">Planning, querying and summarising…</p> }
+          @case ('error') { <div class="alert">{{ c.state.error }}</div> }
+          @case ('done') {
+            @if (c.res?.status !== 'success') {
+              <div class="alert soft">{{ c.res?.message ?? (c.res?.status === 'no_data' ? 'No data for this selection.' : 'This question could not be answered.') }}</div>
+            } @else {
+              <!-- Key finding -->
+              <section class="block">
+                <div class="block-head">
+                  <h4>Key finding</h4>
+                  @if (c.grounding; as g) {
+                    @if (g.checked === 0) { <span class="badge muted-b">No figures to check</span> }
+                    @else if (g.unmatched.length === 0) { <span class="badge ok-b" title="Each figure in the text appears in the result rows">✓ {{ g.matched }}/{{ g.checked }} figures match the result</span> }
+                    @else { <span class="badge warn-b">{{ g.unmatched.length }} figure{{ g.unmatched.length > 1 ? 's' : '' }} not found in the result</span> }
+                  }
+                </div>
+                <p class="finding">{{ c.res!.insight }}</p>
+                @if (c.grounding?.derived?.length || c.grounding?.bounds?.length) {
+                  <p class="muted tiny">@if (c.grounding!.derived.length) { {{ c.grounding!.derived.join(', ') }} = change between two returned values. }@if (c.grounding!.bounds.length) { {{ c.grounding!.bounds.join(', ') }} = threshold or range, not a result value. }</p>
+                }
+                @if (c.grounding?.unmatched?.length) {
+                  <p class="small warn-t">Check before use: {{ c.grounding!.unmatched.join(', ') }} could not be matched to any returned value. It may be rounded or approximate.</p>
+                }
+                @if (c.res!.comparisons?.length) {
+                  <ul class="bullets">@for (x of c.res!.comparisons; track x) { <li>{{ x }}</li> }</ul>
+                }
+              </section>
+
+              <div class="two">
+                <!-- Trend comparison -->
+                <section class="block">
+                  <h4>{{ c.shape?.isTime ? 'Trend comparison' : 'Comparison' }}</h4>
+                  @for (x of c.comparisons; track x.label) {
+                    <div class="cmp">
+                      <span class="arrow" [attr.data-dir]="x.direction" aria-hidden="true">{{ x.direction === 'up' ? '▲' : x.direction === 'down' ? '▼' : '■' }}</span>
+                      <div><span class="muted small">{{ x.label }}</span><div class="small">{{ x.text }}</div></div>
+                    </div>
+                  } @empty { <p class="muted small">One value only, so there is nothing to compare.</p> }
+                  @if (!c.shape?.isTime && c.comparisons.length) { <p class="muted tiny">Baseline: simple average of the rows returned.</p> }
+                </section>
+
+                <!-- Unusual change -->
+                <section class="block">
+                  <h4>Unusual change</h4>
+                  @for (f of c.flags; track f.subject) {
+                    <div class="flag">
+                      <div class="flag-top"><span class="strong">{{ f.subject }}</span><span class="pill-warn">{{ f.value }}</span></div>
+                      <div class="small">{{ f.text }}</div>
+                    </div>
+                  } @empty {
+                    <p class="muted small">Nothing outside the typical range{{ (c.shape?.rows?.length ?? 0) < 5 ? ' (too few values to test)' : '' }}.</p>
+                  }
+                  @if (c.flags.length) { <p class="muted tiny">Flagged for investigation by a statistical range check. This is not a confirmed cause.</p> }
+                </section>
+              </div>
+
+              <!-- Supporting metrics -->
+              <section class="block support">
+                <h4>Supporting metrics</h4>
+                <div class="support-grid">
+                  <dl class="ctx">
+                    @for (x of c.context; track x.label) { <div><dt>{{ x.label }}</dt><dd>{{ x.value }}</dd></div> }
+                    @if (c.res!.definition) { <div class="wide"><dt>Definition</dt><dd>{{ c.res!.definition }}</dd></div> }
+                  </dl>
+                  @if (c.top.length) {
+                    <table class="mini">
+                      <caption class="sr-only">Supporting values</caption>
+                      <thead><tr><th scope="col">{{ c.shape?.isTime ? 'Latest periods' : 'Highest values' }}</th><th scope="col" class="num">{{ c.shape?.valueLabel }}</th></tr></thead>
+                      <tbody>
+                        @for (t of c.top; track t.label) {
+                          <tr><td>{{ t.label }}@if (t.denom) { <div class="muted tiny">{{ t.denom }}</div> }</td><td class="num strong">{{ t.value }}</td></tr>
+                        }
+                      </tbody>
+                    </table>
+                  }
+                </div>
+                @if (c.res!.caveats?.length) {
+                  <details class="caveats"><summary>{{ c.res!.caveats!.length }} caveat{{ c.res!.caveats!.length > 1 ? 's' : '' }}</summary>
+                    <ul class="bullets">@for (x of c.res!.caveats; track x) { <li>{{ x }}</li> }</ul>
+                  </details>
+                }
+              </section>
+
+              @if (openChart()[c.state.topic.id] && c.res!.chart) { <app-chart [spec]="c.res!.chart" [height]="240" /> }
+
+              <footer class="i-foot">
+                @if (c.res!.chart) { <button type="button" class="btn btn-small" (click)="toggleChart(c.state.topic.id)">{{ openChart()[c.state.topic.id] ? 'Hide chart' : 'Show chart' }}</button> }
+                <button type="button" class="btn btn-small btn-primary" (click)="open(c)">Open in AI Analytics →</button>
+              </footer>
+            }
+          }
+        }
+      </article>
+    }
+  </div>
+</div>

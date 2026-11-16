@@ -297,7 +297,7 @@ export function claims(f: DashboardFilters, limit: number, offset: number): Clai
   const total = sum(pr.map(p => p.total)), denied = sum(pr.map(p => p.denied)), pending = sum(pr.map(p => p.pending)), approved = total - denied - pending;
   const hosp = f.hospital_id.length ? HOSPITALS.filter(h => f.hospital_id.includes(h.id)).map(h => h.name) : null;
   const statusFilter = f.claim_status?.length ? f.claim_status : null;
-  let rows = CLAIM_ROWS.filter(r => (!hosp || hosp.includes(r.hospital_name)) && (!s.dept || r.department_name === s.dept) && (!s.payer || r.payer_name === s.payer.name) && (!statusFilter || statusFilter.includes(r.status)));
+  let rows = CLAIM_ROWS.filter(r => (r.days_pending ?? 0) > 30 && (!hosp || hosp.includes(r.hospital_name)) && (!s.dept || r.department_name === s.dept) && (!s.payer || r.payer_name === s.payer.name) && (!statusFilter || statusFilter.includes(r.status)));
   const bands = ['0–30 days', '31–60 days', '61–90 days', 'Over 90 days'];
   const aging = bands.map(b => ({ band: b, claims: Math.round(CLAIM_ROWS.filter(r => r.aging_band === b).length * (pending / 555 || 0)) }));
   const over30 = sum(aging.slice(1).map(a => a.claims));

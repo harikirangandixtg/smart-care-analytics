@@ -35,7 +35,7 @@
 
 .content { flex: 1; min-width: 0; height: 100vh; display: flex; flex-direction: column; }
 .mock-banner { flex: none; background: var(--orange-l); color: var(--orange-t); font-size: 12px; font-weight: 600; padding: 6px 32px; }
-.scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; position: relative; } // relative: keeps absolutely positioned children (sr-only labels, tooltips) inside the scroll area
 
 // Phones / narrow windows: sidebar becomes a top bar and the page scrolls normally.
 @media (max-width: 820px) {

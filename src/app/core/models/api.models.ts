@@ -106,7 +106,8 @@ export interface AdmissionsResponse {
   granularity: Granularity;
   totals?: {
     total_admissions: number;
-    admissions_per_day: number;
+    admissions_per_day: number | null;
+    unique_patients?: number | null;
     avg_los_days: number;
     top_department: { name: string; admissions: number; share: number } | null;
     peak_period: { label: string; admissions: number } | null;
@@ -145,6 +146,8 @@ export interface ClaimRow {
 /** GET /api/dashboard/claims (paged with limit / offset) — chart keys:
  *  status_distribution, outcomes_by_payer, pending_aging. */
 export interface ClaimsResponse {
+  /** payer_id → pending claim count (from the claims endpoint's by_payer) */
+  pending_by_payer?: Record<string, number>;
   period: ReportingPeriod;
   totals?: {
     total_claims: number;
@@ -166,16 +169,17 @@ export interface PayerDenialRow {
   payer_name: string;
   total_claims: number;
   denied_claims: number;
-  pending_claims: number;
+  pending_claims: number | null;
   denial_rate: number; // percent
 }
 
-export interface DenialReason { code: string; description: string; count: number; share: number }
+export interface DenialReason { code: string; description: string; count: number; share: number; amount?: number | null }
 
 /** GET /api/dashboard/denials — chart keys: by_payer, by_reason, by_department. */
 export interface DenialsResponse {
   period: ReportingPeriod;
   totals?: { denied_claims: number; eligible_claims: number; denial_rate: number; target_rate: number | null };
+  definition?: string | null;
   by_payer?: PayerDenialRow[];
   reasons?: DenialReason[];
   charts?: Partial<Record<string, VisualizationSpec>>;
@@ -286,7 +290,50 @@ export interface ReportResponse {
   format: 'csv' | 'json';
   file_name?: string;
   created_at?: string;
+  completed_at?: string;
+  expires_at?: string;
+  row_count?: number;
+  size_bytes?: number;
   error?: string | null;
+}
+
+// ---------------------------------------------------------------- agents ----
+/** GET /api/agents, /api/agents/{name} (open objects in the OpenAPI spec). */
+export interface AgentInfo {
+  name: string;
+  display_name?: string;
+  version?: string;
+  sha256?: string;
+  description?: string;
+  role?: string;
+  responsibilities?: string[];
+  inputs?: unknown;
+  outputs?: unknown;
+  file?: string;
+  model?: string;
+  status?: string;
+  loaded_at?: string;
+  raw?: unknown;
+}
+export interface AgentInstructions { name: string; content: string; file?: string; version?: string; sha256?: string; frontmatter?: Record<string, unknown> }
+export interface ExecutionStep {
+  name: string;
+  kind?: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+  duration_ms?: number;
+  version?: string;
+  sha256?: string;
+  detail?: string;
+}
+/** POST /api/agents/{name}/execute, read tolerantly. */
+export interface AgentExecution {
+  agent: string; ok: boolean; status: string; duration_ms: number; measured_by: 'server' | 'browser';
+  correlation_id?: string; output: unknown; error?: string; steps: ExecutionStep[]; at: string;
+}
+/** The latest AI Analytics run, from its meta block. */
+export interface PipelineRun {
+  query_id: string; question: string; status: string; ok: boolean; created_at?: string;
+  duration_ms: number | null; correlation_id: string | null; steps: ExecutionStep[]; error: string | null;
 }
 
 // ---------------------------------------------------------------- errors ----

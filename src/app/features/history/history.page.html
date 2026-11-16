@@ -49,7 +49,7 @@
                   </td>
                   <td class="nowrap">{{ it.metric_label ?? '—' }}</td>
                   <td><span class="status" [attr.data-status]="bucket(it.status)">{{ label[bucket(it.status)] }}</span></td>
-                  <td class="num muted nowrap">{{ it.row_count === null || it.row_count === undefined ? '—' : it.row_count + ' rows' }} · {{ it.execution_time_ms }} ms</td>
+                  <td class="num muted nowrap">{{ resultText(it) }}</td>
                 </tr>
               }
             </tbody>
@@ -83,7 +83,6 @@
         @if (shown(); as r) {
           @if (r.chart) { <app-chart [spec]="r.chart" [height]="200" /> }
           <p class="body-text">{{ r.insight ?? r.message }}</p>
-          @if (rerunResult()) { <p class="muted small">Re-run just now as a new question</p> }
         }
         <div class="kv">
           <span class="muted small strong">{{ d.applied_filters ? 'What was answered' : 'Details' }}</span>
@@ -92,14 +91,6 @@
           }
           <div class="kv-row"><span class="muted">Query ID</span><span class="mono">{{ (shown()?.query_id ?? d.query_id).slice(0, 8) }}</span></div>
         </div>
-        @if (rerunError(); as e) { <div class="alert">{{ e }}</div> }
-        @if (selectedItem(); as it) {
-          <div class="row-gap wrap">
-            <button type="button" class="btn btn-primary" [disabled]="rerunning() || bucket(it.status) === 'blocked'" (click)="rerun(it)">{{ rerunning() ? 'Re-running…' : 'Re-run with latest data' }}</button>
-            <button type="button" class="btn" (click)="continueConversation(it)">Continue conversation</button>
-          </div>
-        }
-        <p class="muted small">Re-running checks your current access first. The generated query is kept for audit and is not shown here.</p>
       } @else if (detail().error; as e) {
         <div class="alert">{{ e }}</div>
       } @else if (selectedId()) {
