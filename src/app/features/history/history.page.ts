@@ -32,6 +32,8 @@ export class HistoryPage {
   protected readonly label = LABEL;
   /** keyvalue pipe comparator that keeps the API's order. */
   protected readonly keep = () => 0;
+  /** Show the Result column only when the API reports rows or timing for at least one question on this page. */
+  protected readonly hasResult = computed(() => (this.list().data?.items ?? []).some(i => i.row_count != null || i.execution_time_ms != null));
   protected readonly bucket = (s: string): Bucket => BUCKET[s] ?? 'blocked';
   /** "10 rows · 9.8 s", leaving out whatever the API didn't report. */
   protected resultText(it: { row_count?: number | null; execution_time_ms?: number | null }): string {

@@ -36,3 +36,5 @@
 .empty { text-align: center; color: var(--muted); padding: 28px 12px !important; }
 .how { background: var(--bg); border-radius: 8px; padding: 10px 12px; line-height: 2; }
 .nowrap { white-space: nowrap; }
+tr.gone td { opacity: .55; }
+.group ::ng-deep .filters .field:has(.segmented) { grid-column: 1 / -1; }

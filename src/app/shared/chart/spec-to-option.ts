@@ -4,8 +4,8 @@ import { VisualizationSpec } from '../../core/models/api.models';
 export const PALETTE = {
   ink: '#16202C', muted: '#5B6675', line: '#E3E7EC', grid: '#EEF1F4',
   blue: '#1D5FAD', orange: '#C8661C', grey: '#98A2B0',
-  // categorical series colours (blue/orange first; distinguishable in lightness too)
-  series: ['#1D5FAD', '#C8661C', '#3B8E8C', '#6B5CA5', '#7FA7D6', '#98A2B0', '#B07A2E'],
+  // categorical series colours: 12 distinct (blue/orange first; also differ in lightness)
+  series: ['#1D5FAD', '#C8661C', '#3B8E8C', '#6B5CA5', '#7FA7D6', '#98A2B0', '#B07A2E', '#A3426B', '#5E8C3A', '#2F3E56', '#D9A43B', '#E07F8A'],
   sequential: ['#EAF1FA', '#CFE0F3', '#A9C6E8', '#7FA7D6', '#4F82C0', '#1D5FAD', '#123F78'],
 };
 
@@ -55,6 +55,13 @@ function pivot(spec: VisualizationSpec) {
   };
 }
 
+/** One-row legend under the chart; pages with arrows when the names don't fit, so it never covers the plot. */
+const scrollLegend = () => ({
+  type: 'scroll', orient: 'horizontal', bottom: 0, left: 'center', width: '92%', icon: 'roundRect', itemWidth: 12, itemHeight: 8, itemGap: 14,
+  textStyle: { color: PALETTE.muted, fontSize: 12 }, pageIconSize: 10, pageIconColor: PALETTE.ink, pageIconInactiveColor: PALETTE.line,
+  pageTextStyle: { color: PALETTE.muted, fontSize: 11 },
+});
+
 function lineOrBar(spec: VisualizationSpec, kind: 'line' | 'bar'): EChartsCoreOption {
   const { categories, series } = pivot(spec);
   const o = spec.options ?? {};
@@ -68,12 +75,12 @@ function lineOrBar(spec: VisualizationSpec, kind: 'line' | 'bar'): EChartsCoreOp
 
   return {
     ...base(),
-    tooltip: { trigger: 'axis', axisPointer: { type: kind === 'bar' ? 'shadow' : 'line' }, valueFormatter: format },
-    legend: multi ? { bottom: 0, icon: 'roundRect', itemWidth: 12, itemHeight: 8, textStyle: { color: PALETTE.muted } } : undefined,
-    grid: { left: 12, right: horizontal ? 56 : 20, top: 28, bottom: multi ? 36 : 12, containLabel: true },
+    tooltip: { trigger: 'axis', axisPointer: { type: kind === 'bar' ? 'shadow' : 'line' }, valueFormatter: format, order: multi && !stacked ? 'valueDesc' : 'seriesAsc', confine: true },
+    legend: multi ? scrollLegend() : undefined,
+    grid: { left: 12, right: horizontal ? 56 : 24, top: 28, bottom: (multi ? 40 : 12) + (kind === 'line' && categories.length > 16 ? 26 : 0), containLabel: true },
     xAxis: horizontal ? valAxis : catAxis,
     yAxis: horizontal ? catAxis : valAxis,
-    dataZoom: kind === 'line' && categories.length > 16 ? [{ type: 'inside' }, { type: 'slider', height: 16, bottom: multi ? 30 : 0 }] : undefined,
+    dataZoom: kind === 'line' && categories.length > 16 ? [{ type: 'inside' }, { type: 'slider', height: 16, bottom: multi ? 34 : 0 }] : undefined,
     series: series.map((s, i) => ({
       name: s.name,
       type: kind,
@@ -83,8 +90,12 @@ function lineOrBar(spec: VisualizationSpec, kind: 'line' | 'bar'): EChartsCoreOp
         ? s.values.map(v => ({ value: v, itemStyle: { color: (v ?? 0) > o.highlightAbove! ? PALETTE.orange : PALETTE.blue } }))
         : s.values,
       smooth: false,
-      symbolSize: 6,
-      lineStyle: { width: 2.5 },
+      symbolSize: multi ? 5 : 6,
+      lineStyle: { width: multi ? 2 : 2.5 },
+      // hovering a line or its legend entry highlights that series and fades the others
+      emphasis: multi ? { focus: 'series', lineStyle: { width: 3 } } : undefined,
+      blur: multi ? { lineStyle: { opacity: 0.15 }, itemStyle: { opacity: 0.15 } } : undefined,
+      connectNulls: kind === 'line',
       areaStyle: kind === 'line' && o.area && !multi ? { opacity: 0.08 } : undefined,
       barMaxWidth: horizontal ? 22 : 36,
       itemStyle: { borderRadius: stacked ? 0 : horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0] },
@@ -102,7 +113,7 @@ function pie(spec: VisualizationSpec): EChartsCoreOption {
   return {
     ...base(),
     tooltip: { trigger: 'item', valueFormatter: fmt(spec.options?.unit) },
-    legend: { bottom: 0, textStyle: { color: PALETTE.muted } },
+    legend: scrollLegend(),
     series: [{ type: 'pie', radius: spec.options?.donut === false ? ['0%', '70%'] : ['48%', '72%'], center: ['50%', '45%'], itemStyle: { borderColor: '#fff', borderWidth: 2 },
       label: { formatter: (p: { name: string; percent: number }) => `${p.name}\n${p.percent.toFixed(1)}%`, color: PALETTE.ink },
       data: spec.data.map(r => { const name = String(r[spec.xKey!]); return { name, value: num(r[key]), itemStyle: STATUS_COLOURS[name] ? { color: STATUS_COLOURS[name] } : undefined }; }) }],

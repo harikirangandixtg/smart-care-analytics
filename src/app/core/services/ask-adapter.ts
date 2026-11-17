@@ -49,18 +49,23 @@ export function normalizeAsk(raw: Raw): AskResponse {
   const summary = typeof answer === 'string' ? answer : answer?.['summary'] ?? null;
   const insight = raw['insight'] ?? summary;
 
-  // what was answered: from plan (real API) or applied_filters (spec)
-  let applied: Record<string, string> | undefined = raw['applied_filters'];
-  if (!applied && Object.keys(plan).length) {
+  // what was answered: from plan (real API) or applied_filters (spec). Every value goes through
+  // readable(), because the plan can hold objects such as departments: [{ id, name }].
+  let applied: Record<string, string> | undefined;
+  if (raw['applied_filters'] && typeof raw['applied_filters'] === 'object') {
     applied = {};
-    if (plan['label'] ?? plan['metric']) applied['Metric'] = String(plan['label'] ?? title(plan['metric']));
-    const dims: string[] = plan['dimensions'] ?? [];
-    if (dims.length) applied['Grouped by'] = dims.map(title).join(' × ');
+    for (const [k, v] of Object.entries(raw['applied_filters'] as Record<string, unknown>)) { const t = readable(v); if (t) applied[k] = t; }
+  } else if (Object.keys(plan).length) {
+    applied = {};
+    const metric = readable(plan['label']) || metricLabel(plan['metric']);
+    if (metric) applied['Metric'] = metric;
+    const dims = readable(plan['dimensions'], title, ' × ');
+    if (dims) applied['Grouped by'] = dims;
     const per = plan['period'];
     if (per?.from || per?.date_from) applied['Period'] = `${per.from ?? per.date_from} to ${per.to ?? per.date_to}`;
     for (const [k, v] of Object.entries(plan['filters'] ?? {})) {
-      if (v === null || v === undefined || (Array.isArray(v) && !v.length)) continue;
-      applied[title(k.replace(/_id$/, ''))] = Array.isArray(v) ? v.join(', ') : String(v);
+      const t = readable(v);
+      if (t) applied[title(k.replace(/_ids?$/, ''))] = t;
     }
   }
 
@@ -71,7 +76,7 @@ export function normalizeAsk(raw: Raw): AskResponse {
     status,
     question: raw['question'] ?? '',
     metric: raw['metric'] ?? plan['metric'] ?? null,
-    metric_label: raw['metric_label'] ?? plan['label'] ?? null,
+    metric_label: readable(raw['metric_label'] ?? plan['label']) || metricLabel(plan['metric']) || null,
     message: raw['message'] ?? raw['detail'] ?? (status !== 'success' ? summary : null) ?? null,
     chart,
     insight: status === 'success' ? insight : raw['insight'] ?? null,
@@ -113,13 +118,56 @@ export function normalizeHistory(raw: unknown, limit: number, offset: number): H
       parent_query_id: i['parent_query_id'] ?? null,
       question: i['question'] ?? i['query'] ?? i['text'] ?? '',
       status: STATUS[st] ?? st,
-      metric_label: i['metric_label'] ?? plan['label'] ?? i['metric'] ?? plan['metric'] ?? null,
+      metric_label: readable(i['metric_label'] ?? i['metric_name'] ?? plan['label']) || metricLabel(i['metric'] ?? plan['metric']) || null,
       scope_label: i['scope_label'] ?? null,
-      row_count: i['row_count'] ?? i['rows'] ?? i['table']?.['row_count'] ?? null,
-      execution_time_ms: i['execution_time_ms'] ?? i['duration_ms'] ?? meta['duration_ms'] ?? i['elapsed_ms'] ?? null,
+      row_count: firstNumber(i['row_count'], i['rows_returned'], i['result_rows'], i['result_count'], i['rows'], i['table']?.['row_count'], i['result']?.['row_count'], meta['row_count']),
+      execution_time_ms: firstNumber(i['execution_time_ms'], i['duration_ms'], meta['duration_ms'], i['latency_ms'], i['elapsed_ms'], i['total_ms'], meta['elapsed_ms'], i['timings']?.['total_ms'])
+        ?? secondsToMs(firstNumber(i['duration_seconds'], i['duration_s'], meta['duration_seconds'])),
       created_at: toIso(i['created_at'] ?? i['asked_at'] ?? i['timestamp'] ?? i['ts'] ?? i['time']),
     };
   });
   const total = r['total'] ?? r['count'] ?? r['total_count'] ?? r['total_items'] ?? (items.length < limit ? offset + items.length : null);
   return { items, total: total ?? offset + items.length, limit: r['limit'] ?? limit, offset: r['offset'] ?? offset };
+}
+
+/**
+ * Any plan value → display text. Strings and numbers as they are; objects by their name/label
+ * (falling back to id/code); lists joined. Returns '' for empty values so the row is skipped.
+ */
+export function readable(v: unknown, fmt: (s: string) => string = s => s, sep = ', '): string {
+  if (v === null || v === undefined || v === '') return '';
+  if (Array.isArray(v)) return v.map(x => readable(x, fmt, sep)).filter(Boolean).join(sep);
+  if (typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    const pick = ['name', 'label', 'display_name', 'title', 'department_name', 'hospital_name', 'payer_name', 'value', 'id', 'code']
+      .map(k => o[k]).find(x => typeof x === 'string' || typeof x === 'number');
+    if (pick !== undefined) return fmt(String(pick));
+    // e.g. { from, to } or { relative: 'last_2_months' }: show its plain values
+    return Object.values(o).filter(x => typeof x === 'string' || typeof x === 'number').map(x => fmt(String(x))).join(' – ');
+  }
+  return fmt(String(v));
+}
+
+/** First argument that is a finite number (numeric strings count), else null. */
+function firstNumber(...vals: unknown[]): number | null {
+  for (const v of vals) {
+    const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' && !isNaN(+v) ? +v : NaN;
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+const secondsToMs = (s: number | null) => (s === null ? null : Math.round(s * 1000));
+
+/** Display names for metric keys the API returns without a label. */
+const METRIC_LABELS: Record<string, string> = {
+  admissions: 'Admissions', unique_patients: 'Unique patients', claims: 'Claims', claim_amount: 'Claim amount',
+  denial_rate: 'Denial rate', denial_rate_decided: 'Denial rate (decided claims)', denied_claims: 'Denied claims',
+  avg_length_of_stay: 'Avg length of stay', avg_los: 'Avg length of stay', pending_claims: 'Pending claims',
+  pending_over_30d: 'Pending over 30 days', pending_amount: 'Pending amount', paid_amount: 'Paid amount',
+  denied_amount: 'Denied amount', patient_days: 'Patient days', bed_utilization_pct: 'Bed utilisation',
+};
+export function metricLabel(key: unknown): string {
+  const k = readable(key);
+  if (!k) return '';
+  return METRIC_LABELS[k] ?? k.replace(/_(\d+)d$/, ' over $1 days').replace(/_pct$/, ' %').replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
 }

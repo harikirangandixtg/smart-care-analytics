@@ -2,7 +2,7 @@ import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, filter, map, switchMap, take, takeWhile, throwError, timer } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { ExportRequest, ReportResponse, ReportStatus } from '../models/api.models';
+import { ExportRequest, ReportFormat, ReportResponse, ReportStatus } from '../models/api.models';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const STATUS: Record<string, ReportStatus> = {
@@ -19,7 +19,9 @@ export function normalizeReport(raw: any, fallback?: Partial<ReportResponse>): R
     ...fallback,
     report_id: r.report_id ?? r.id ?? fallback?.report_id ?? '',
     status: STATUS[String(r.status ?? '').toLowerCase()] ?? fallback?.status ?? 'queued',
-    format: r.format ?? fallback?.format ?? 'csv',
+    format: (String(r.format ?? fallback?.format ?? 'csv').toLowerCase() as ReportFormat),
+    download_url: r.download_url ?? r.url ?? fallback?.download_url,
+    dashboard: r.dashboard ?? r.request?.dashboard ?? fallback?.dashboard ?? null,
     file_name: r.file_name ?? r.filename ?? r.file ?? fallback?.file_name,
     created_at: r.created_at ?? fallback?.created_at ?? new Date().toISOString(),
     completed_at: r.completed_at ?? r.finished_at ?? fallback?.completed_at,
@@ -37,8 +39,19 @@ export class ReportService {
   private readonly base = `${environment.apiBaseUrl}/api/reports`;
 
   export(req: ExportRequest): Observable<ReportResponse> {
-    const body = { format: 'csv', ...req };
-    return this.http.post(`${this.base}/export`, body).pipe(map(r => normalizeReport(r, { format: body.format as 'csv' | 'json' })));
+    const body = { format: 'csv' as ReportFormat, ...req };
+    return this.http.post(`${this.base}/export`, body).pipe(map(r => normalizeReport(r, { format: body.format, dashboard: body.dashboard ?? null })));
+  }
+
+  /** GET /api/reports?days=7: this session's files that are still available, newest first. */
+  recent(days = 7): Observable<ReportResponse[]> {
+    return this.http.get<unknown>(this.base, { params: { days } }).pipe(map(r => {
+      const o = (r ?? {}) as Record<string, unknown>;
+      const list = (Array.isArray(r) ? r : o['items'] ?? o['reports'] ?? o['data'] ?? []) as unknown[];
+      return list.map(x => normalizeReport(x, { report_id: '', status: 'completed', format: 'csv' }))
+        .filter(x => x.report_id)
+        .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')));
+    }));
   }
 
   status(reportId: string, known?: ReportResponse): Observable<ReportResponse> {
@@ -55,9 +68,20 @@ export class ReportService {
     );
   }
 
-  /** GET /api/reports/{id}?download=true. Uses the server's file name from Content-Disposition when sent. */
+  /** The file address: download_url from the API (made absolute), else /api/reports/{id}?download=true. */
+  private fileUrl(report: ReportResponse): string {
+    const u = report.download_url;
+    if (u && /^https?:\/\//i.test(u)) return u;
+    if (u) return `${environment.apiBaseUrl}${u.startsWith('/') ? '' : '/'}${u}`;
+    return `${this.base}/${encodeURIComponent(report.report_id)}?download=true`;
+  }
+
+  /**
+   * Fetches the file as a blob (a plain link couldn't send X-Session-Id). Uses the server's file
+   * name from Content-Disposition when sent.
+   */
   download(report: ReportResponse): Observable<{ blob: Blob; fileName: string }> {
-    return this.http.get(`${this.base}/${encodeURIComponent(report.report_id)}`, { params: { download: true }, responseType: 'blob', observe: 'response' }).pipe(
+    return this.http.get(this.fileUrl(report), { responseType: 'blob', observe: 'response' }).pipe(
       map((res: HttpResponse<Blob>) => {
         const cd = res.headers.get('content-disposition') ?? '';
         const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);

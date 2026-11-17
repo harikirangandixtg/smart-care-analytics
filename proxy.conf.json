@@ -1,6 +1,6 @@
 {
   "/api": {
-    "target": "http://127.0.0.1:8000",
+    "target": "https://healthcare-analytics-backend-dea3crh8cnfehhcs.centralus-01.azurewebsites.net",
     "secure": false,
     "changeOrigin": true,
     "logLevel": "debug"

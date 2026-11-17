@@ -1,9 +1,10 @@
 import { HttpErrorResponse, HttpInterceptorFn, HttpRequest, HttpResponse } from '@angular/common/http';
-import { delay, dematerialize, materialize, of, throwError } from 'rxjs';
+import { delay, dematerialize, from, map, materialize, of, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   AskRequest, ClaimStatus, DashboardFilters, ExportRequest, FollowupRequest, Granularity, GroupBy, ReportResponse,
 } from '../models/api.models';
+import { csvToXlsx } from './mock-xlsx';
 import { MockError, mockAsk, mockFollowup, mockHistory, mockResult } from './mock-analytics';
 import * as data from './mock-data';
 
@@ -43,8 +44,11 @@ const int = (q: URLSearchParams, k: string, def: number, min: number, max: numbe
 };
 
 // ----------------------------------------------------------- reports store
-const reports = new Map<string, ReportResponse & { body: string; polls: number }>();
-function exportReport(req: ExportRequest): ReportResponse {
+/** Reports belong to the X-Session-Id that requested them, as on the API. */
+const sid = (r: HttpRequest<unknown>) => r.headers.get('x-session-id') ?? '';
+const reports = new Map<string, ReportResponse & { body: string; polls: number; session: string }>();
+const DAY = 864e5;
+function exportReport(req: ExportRequest, session: string): ReportResponse {
   if (!req || !['analytics', 'dashboard'].includes(req.source)) throw Object.assign(new MockError(422, 'Validation error'), { detail: [{ loc: ['body', 'source'], msg: "String should match pattern '^(analytics|dashboard)$'", type: 'string_pattern_mismatch' }] });
   const format = req.format ?? 'csv';
   let rows: Record<string, unknown>[] = [];
@@ -68,21 +72,33 @@ function exportReport(req: ExportRequest): ReportResponse {
   const body = format === 'json' ? JSON.stringify(rows, null, 2) : [cols.map(esc).join(','), ...rows.map(r => cols.map(c => esc(r[c])).join(','))].join('\n');
   const report_id = crypto.randomUUID();
   const file_name = `${name.replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase()}.${format}`;
-  const rec = { report_id, status: 'processing' as const, format, file_name, created_at: new Date().toISOString(), body, polls: 0 };
+  const now = Date.now();
+  // like the API: finished straight away, available for 7 days, with a download_url
+  const rec = { report_id, status: 'completed' as const, format, file_name, dashboard: req.dashboard ?? null, row_count: rows.length,
+    created_at: new Date(now).toISOString(), expires_at: new Date(now + 7 * DAY).toISOString(),
+    download_url: `/api/reports/${report_id}?download=true`, body, polls: 0, session };
   reports.set(report_id, rec);
-  const { body: _b, polls: _p, ...pub } = rec;
+  const { body: _b, polls: _p, session: _s, ...pub } = rec;
   return pub;
 }
-function reportStatus(id: string, download: boolean) {
+function reportStatus(id: string, download: boolean, session: string) {
   const r = reports.get(id);
-  if (!r) throw new MockError(404, 'Report not found.');
-  if (++r.polls >= 2) r.status = 'completed';
+  if (!r || r.session !== session) throw new MockError(404, 'Report not found.');
+  if (Date.parse(r.expires_at!) <= Date.now()) throw new MockError(410, 'This file has expired.');
   if (download) {
-    if (r.status !== 'completed') throw new MockError(409, 'The report is not ready yet.');
+    if (r.format === 'xlsx') return csvToXlsx(r.body, 'Report');
     return new Blob([r.body], { type: r.format === 'json' ? 'application/json' : 'text/csv' });
   }
-  const { body: _b, polls: _p, ...pub } = r;
+  const { body: _b, polls: _p, session: _s, ...pub } = r;
   return pub;
+}
+function recentReports(days: number, session: string) {
+  const cutoff = Date.now() - days * DAY;
+  const items = [...reports.values()]
+    .filter(r => r.session === session && Date.parse(r.created_at!) >= cutoff && Date.parse(r.expires_at!) > Date.now())
+    .sort((a, b) => b.created_at!.localeCompare(a.created_at!))
+    .map(({ body: _b, polls: _p, session: _s, status: _st, file_name: _f, dashboard: _d, ...pub }) => pub);
+  return { items };
 }
 
 // ------------------------------------------------------------------- agents
@@ -122,8 +138,9 @@ const ROUTES: { method: string; path: RegExp; handle: Handler; status?: number }
   { method: 'GET', path: /^\/api\/analytics\/history$/, handle: (_r, q) => mockHistory(int(q, 'limit', 20, 1, 50), int(q, 'offset', 0, 0, 10000)) },
   { method: 'GET', path: /^\/api\/analytics\/([^/]+)$/, handle: (_r, _q, m) => mockResult(decodeURIComponent(m[1])) },
 
-  { method: 'POST', path: /^\/api\/reports\/export$/, handle: r => exportReport(r.body as ExportRequest), status: 201 },
-  { method: 'GET', path: /^\/api\/reports\/([^/]+)$/, handle: (_r, q, m) => reportStatus(decodeURIComponent(m[1]), q.get('download') === 'true') },
+  { method: 'POST', path: /^\/api\/reports\/export$/, handle: r => exportReport(r.body as ExportRequest, sid(r)), status: 201 },
+  { method: 'GET', path: /^\/api\/reports$/, handle: (r, q) => recentReports(int(q, 'days', 7, 1, 30), sid(r)) },
+  { method: 'GET', path: /^\/api\/reports\/([^/]+)$/, handle: (r, q, m) => reportStatus(decodeURIComponent(m[1]), q.get('download') === 'true', sid(r)) },
 
   { method: 'GET', path: /^\/api\/agents$/, handle: () => ({ items: MOCK_AGENTS.map(({ instructions: _i, ...a }) => a) }) },
   { method: 'GET', path: /^\/api\/agents\/([a-z0-9-]+)$/, handle: (_r, _q, m) => { const { instructions: _i, ...a } = agent(m[1]); return a; } },
@@ -152,6 +169,9 @@ export const mockApiInterceptor: HttpInterceptorFn = (req, next) => {
   const latency = environment.mockLatencyMs + Math.round(Math.random() * 150);
   try {
     const body = route.handle(req, url.searchParams, url.pathname.match(route.path)!);
+    if (body instanceof Promise) {
+      return from(body).pipe(map(b => new HttpResponse({ status: route.status ?? 200, body: b, url: req.url })), delay(latency));
+    }
     return of(new HttpResponse({ status: route.status ?? 200, body, url: req.url })).pipe(delay(latency));
   } catch (e) {
     const status = e instanceof MockError ? e.status : 500;

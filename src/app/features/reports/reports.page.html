@@ -31,7 +31,7 @@
           <label class="fmt" [class.on]="format() === 'xlsx'"><input type="radio" name="fmt" value="xlsx" [checked]="format() === 'xlsx'" (change)="format.set('xlsx')" /> Excel</label>
           <label class="fmt" [class.on]="format() === 'json'"><input type="radio" name="fmt" value="json" [checked]="format() === 'json'" (change)="format.set('json')" /> JSON</label>
         </div>
-        @if (format() === 'xlsx') { <p class="muted small">The server exports CSV; your browser converts it to an Excel workbook when you download.</p> }
+        <p class="muted small">Files stay available to download for {{ days }} days.</p>
       </fieldset>
 
       <div class="summary">
@@ -48,47 +48,56 @@
       <p class="muted small">Aggregate data only, no patient identifiers. Downloads are checked against your access on each request.</p>
     </section>
 
-    <!-- GET /api/reports/{report_id} (status) · GET /api/reports/{report_id}?download=true -->
+    <!-- GET /api/reports?days=7 · download via download_url (X-Session-Id) -->
     <section class="card jobs" aria-labelledby="jobs-h">
       <div class="card-head">
-        <div><h2 id="jobs-h">Your exports</h2><p class="muted">Requested in this session · status updates automatically</p></div>
-        @if (counts().total > counts().running) { <button type="button" class="btn btn-small" (click)="jobsStore.clear()">Clear finished</button> }
+        <div><h2 id="jobs-h">Your exports</h2><p class="muted">Files from the last {{ days }} days on this browser</p></div>
+        <button type="button" class="btn btn-small" (click)="exports.load()" [disabled]="exports.loading()">{{ exports.loading() ? 'Refreshing…' : 'Refresh' }}</button>
       </div>
+
+      @if (exports.error(); as e) { <div class="alert">{{ e }}</div> }
 
       @if (counts().total) {
         <div class="chips">
-          <span class="chip">{{ counts().total }} requested</span>
+          <span class="chip">{{ counts().done }} available</span>
           @if (counts().running) { <span class="chip chip-strong">{{ counts().running }} in progress</span> }
-          <span class="chip">{{ counts().done }} ready</span>
           @if (counts().failed) { <span class="chip warn">{{ counts().failed }} failed</span> }
         </div>
       }
 
       <div class="table-wrap">
         <table class="table">
-          <thead><tr><th scope="col">Report</th><th scope="col">Requested</th><th scope="col">Status</th><th scope="col" class="num">Size</th><th scope="col" class="num">Action</th></tr></thead>
+          <thead><tr><th scope="col">Report</th><th scope="col">Requested</th><th scope="col">Available until</th><th scope="col" class="num">Action</th></tr></thead>
           <tbody>
             @for (j of jobs(); track j.report_id) {
-              <tr>
+              <tr [class.gone]="expired(j.expires_at)">
                 <td>
-                  <div class="strong">{{ label(j.category) }} <span class="fmt-tag">{{ formatLabel(j.choice) }}</span></div>
-                  <div class="muted small">{{ j.scope }}</div>
-                  @if (j.file_name) { <div class="mono small">{{ j.file_name }}</div> }
+                  <div class="strong">{{ label(j) }} <span class="fmt-tag">{{ formatLabel(j.format) }}</span></div>
+                  @if (j.scope) { <div class="muted small">{{ j.scope }}</div> }
+                  <div class="muted small">
+                    @if (j.row_count !== undefined && j.row_count !== null) { {{ j.row_count | number }} rows }
+                    @if (j.size_bytes) { · {{ size(j.size_bytes) }} }
+                    @if (j.file_name) { · <span class="mono">{{ j.file_name }}</span> }
+                  </div>
                 </td>
                 <td class="nowrap muted">{{ j.created_at | date: 'd MMM, HH:mm' }}</td>
                 <td>
-                  <span class="status" [attr.data-status]="j.status">
-                    @if (j.status === 'queued' || j.status === 'processing') { <span class="spin" aria-hidden="true"></span> }
-                    {{ j.status === 'queued' ? 'Queued' : j.status === 'processing' ? 'Processing' : j.status === 'completed' ? 'Completed' : 'Failed' }}
-                  </span>
-                  @if (j.row_count !== undefined && j.row_count !== null) { <div class="muted small">{{ j.row_count | number }} rows</div> }
-                  @if (j.status === 'failed' && j.error) { <div class="err small">{{ j.error }}</div> }
-                  @if (j.expires_at && j.status === 'completed') { <div class="muted small">Link expires {{ j.expires_at | date: 'd MMM, HH:mm' }}</div> }
+                  @if (j.status === 'completed') {
+                    @if (j.expires_at) {
+                      <div class="nowrap">{{ j.expires_at | date: 'd MMM, HH:mm' }}</div>
+                      <div class="small" [class.err]="expired(j.expires_at)" [class.muted]="!expired(j.expires_at)">{{ remaining(j.expires_at) }}</div>
+                    } @else { <span class="status" data-status="completed">Ready</span> }
+                  } @else {
+                    <span class="status" [attr.data-status]="j.status">
+                      @if (j.status === 'queued' || j.status === 'processing') { <span class="spin" aria-hidden="true"></span> }
+                      {{ j.status === 'queued' ? 'Queued' : j.status === 'processing' ? 'Processing' : 'Failed' }}
+                    </span>
+                    @if (j.status === 'failed' && j.error) { <div class="err small">{{ j.error }}</div> }
+                  }
                 </td>
-                <td class="num nowrap muted">{{ size(j.size_bytes) }}</td>
                 <td class="num">
                   @if (j.status === 'completed') {
-                    <button type="button" class="btn btn-small btn-primary" (click)="download(j)" [disabled]="j.downloading">{{ j.downloading ? 'Downloading…' : 'Download' }}</button>
+                    <button type="button" class="btn btn-small btn-primary" (click)="download(j)" [disabled]="j.downloading || expired(j.expires_at)">{{ j.downloading ? 'Downloading…' : 'Download' }}</button>
                     @if (j.downloadError) { <div class="err small">{{ j.downloadError }}</div> }
                   } @else if (j.status === 'failed') {
                     <span class="muted small">—</span>
@@ -98,16 +107,18 @@
                 </td>
               </tr>
             } @empty {
-              <tr><td colspan="5" class="empty">No exports yet. Choose a report on the left and select <strong>Generate report</strong>.</td></tr>
+              <tr><td colspan="4" class="empty">
+                @if (exports.loading()) { Loading your exports… }
+                @else { No exports in the last {{ days }} days. Choose a report on the left and select <strong>Generate report</strong>. }
+              </td></tr>
             }
           </tbody>
         </table>
       </div>
 
       <div class="how muted small">
-        <strong>How it works:</strong> the request is queued, the server builds the file, and the status moves
-        <span class="status" data-status="queued">Queued</span> → <span class="status" data-status="processing">Processing</span> →
-        <span class="status" data-status="completed">Completed</span>. Small POC extracts usually finish in a few seconds.
+        <strong>How it works:</strong> the server builds the file (usually in a few seconds) and keeps it for {{ days }} days.
+        Downloads are checked against this browser's session, so use the same browser to download later.
       </div>
     </section>
   </div>

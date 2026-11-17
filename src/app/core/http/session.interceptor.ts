@@ -2,14 +2,25 @@ import { HttpInterceptorFn } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 
 const KEY = 'sca-session-id';
+/** What the API accepts: a UUID, or 16–64 letters, digits and hyphens. */
+const VALID = /^[A-Za-z0-9-]{16,64}$/;
+let memory: string | null = null;
 
-function sessionId(): string {
+/**
+ * One session ID per browser, created once and kept in localStorage, so exports and history stay
+ * reachable after reloads, in new tabs and on later days. Falls back to memory if storage is blocked.
+ */
+export function sessionId(): string {
   try {
-    let id = sessionStorage.getItem(KEY);
-    if (!id) { id = crypto.randomUUID(); sessionStorage.setItem(KEY, id); }
+    let id = localStorage.getItem(KEY);
+    if (!id || !VALID.test(id)) {
+      const old = sessionStorage.getItem(KEY); // carry over the ID from earlier builds
+      id = old && VALID.test(old) ? old : crypto.randomUUID();
+      localStorage.setItem(KEY, id);
+    }
     return id;
   } catch {
-    return (window as unknown as { __scaSid?: string }).__scaSid ??= crypto.randomUUID();
+    return (memory ??= crypto.randomUUID());
   }
 }
 
@@ -20,7 +31,8 @@ function sessionId(): string {
  */
 export const sessionInterceptor: HttpInterceptorFn = (req, next) => {
   const headers: Record<string, string> = { 'x-correlation-id': crypto.randomUUID() };
-  if (/\/api\/(analytics|reports)\//.test(req.url)) headers['x-session-id'] = sessionId();
+  const path = req.url.split('?')[0];
+  if (/\/api\/(analytics|reports)(\/|$)/.test(path)) headers['x-session-id'] = sessionId();
   if (/\/api\/agents(\/|$)/.test(req.url.split('?')[0])) {
     if (environment.adminKey) headers['x-admin-key'] = environment.adminKey;
   }

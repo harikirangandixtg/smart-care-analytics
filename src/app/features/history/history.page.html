@@ -31,10 +31,10 @@
     <div class="list">
       <div class="table-wrap card-flat">
         <table class="table history-table">
-          <thead><tr><th scope="col" class="time">Time</th><th scope="col">Question</th><th scope="col">Metric</th><th scope="col">Status</th><th scope="col" class="num">Result</th></tr></thead>
+          <thead><tr><th scope="col" class="time">Time</th><th scope="col">Question</th><th scope="col">Metric</th><th scope="col">Status</th>@if (hasResult()) { <th scope="col" class="num">Result</th> }</tr></thead>
           @for (g of groups(); track g.day) {
             <tbody>
-              <tr class="day"><th colspan="5" scope="colgroup">{{ g.day }}</th></tr>
+              <tr class="day"><th [attr.colspan]="hasResult() ? 5 : 4" scope="colgroup">{{ g.day }}</th></tr>
               @for (it of g.items; track it.query_id) {
                 <tr [class.selected]="it.query_id === selectedId()">
                   <td class="time muted">{{ it.created_at | date: 'HH:mm' }}</td>
@@ -49,12 +49,12 @@
                   </td>
                   <td class="nowrap">{{ it.metric_label ?? '—' }}</td>
                   <td><span class="status" [attr.data-status]="bucket(it.status)">{{ label[bucket(it.status)] }}</span></td>
-                  <td class="num muted nowrap">{{ resultText(it) }}</td>
+                  @if (hasResult()) { <td class="num muted nowrap">{{ resultText(it) }}</td> }
                 </tr>
               }
             </tbody>
           } @empty {
-            <tbody><tr><td colspan="5" class="muted">{{ list().loading ? 'Loading…' : 'No questions match these filters.' }}</td></tr></tbody>
+            <tbody><tr><td [attr.colspan]="hasResult() ? 5 : 4" class="muted">{{ list().loading ? 'Loading…' : 'No questions match these filters.' }}</td></tr></tbody>
           }
         </table>
       </div>
@@ -89,6 +89,8 @@
           @for (f of (shown()?.applied_filters ?? {}) | keyvalue: keep; track f.key) {
             <div class="kv-row"><span class="muted">{{ f.key }}</span><span>{{ f.value }}</span></div>
           }
+          @if (shown()?.row_count != null) { <div class="kv-row"><span class="muted">Rows returned</span><span>{{ shown()!.row_count }}</span></div> }
+          @if (shown()?.execution_time_ms != null) { <div class="kv-row"><span class="muted">Time taken</span><span>{{ resultText({ execution_time_ms: shown()!.execution_time_ms }) }}</span></div> }
           <div class="kv-row"><span class="muted">Query ID</span><span class="mono">{{ (shown()?.query_id ?? d.query_id).slice(0, 8) }}</span></div>
         </div>
       } @else if (detail().error; as e) {

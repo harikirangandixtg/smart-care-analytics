@@ -273,7 +273,7 @@ export interface HistoryResponse { items: HistoryItem[]; total: number; limit: n
 /** POST /api/reports/export body (OpenAPI ExportRequest). */
 export interface ExportRequest {
   source: 'analytics' | 'dashboard';
-  format?: 'csv' | 'json';
+  format?: ReportFormat;
   query_id?: string | null;
   dashboard?: 'summary' | 'admissions' | 'revenue' | 'claims' | 'denials' | 'departments' | 'hospitals' | 'trends' | null;
   section?: string | null;
@@ -284,10 +284,15 @@ export interface ExportRequest {
 }
 
 export type ReportStatus = 'queued' | 'processing' | 'completed' | 'failed';
+export type ReportFormat = 'csv' | 'xlsx' | 'json';
 export interface ReportResponse {
   report_id: string;
   status: ReportStatus;
-  format: 'csv' | 'json';
+  format: ReportFormat;
+  /** Relative or absolute; fetch it as a blob so the X-Session-Id header is sent. */
+  download_url?: string;
+  /** Which dashboard dataset was exported, when the API says. */
+  dashboard?: string | null;
   file_name?: string;
   created_at?: string;
   completed_at?: string;
