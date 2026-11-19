@@ -11,7 +11,7 @@ import {
 type Raw = Record<string, any>;
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const cr = (v: unknown) => (typeof v === 'number' ? Math.round((v / 1e7) * 100) / 100 : null); // ₹ → crore, 2 dp
+const cr = (v: unknown) => (typeof v === 'number' ? Math.round((v / 1e6) * 100) / 100 : null); // $ → $ millions, 2 dp
 const arr = (v: unknown): Raw[] => (Array.isArray(v) ? v : []);
 
 /** '2026-01-01' → 'Jan' / 'Jan 2026' (month), '5 Jan' (week), 'Q1 2026' (quarter). */
@@ -31,7 +31,7 @@ function period(raw: Raw): ReportingPeriod {
   return { date_from: p.date_from ?? p.from ?? '', date_to: p.date_to ?? p.to ?? '' };
 }
 
-const UNIT: Record<string, KpiUnit> = { count: 'count', currency: 'currency_inr', currency_inr: 'currency_inr', inr: 'currency_inr', percent: 'percent', percentage: 'percent', days: 'days', decimal: 'decimal' };
+const UNIT: Record<string, KpiUnit> = { count: 'count', currency: 'currency', currency_usd: 'currency', usd: 'currency', currency_inr: 'currency', inr: 'currency', percent: 'percent', percentage: 'percent', days: 'days', decimal: 'decimal' };
 
 /** '2026-05-01','2026-07-31' → 'May – Jul 2026'; partial months keep the day: '5 May – 20 Jul 2026'. */
 export function rangeLabel(from: unknown, to: unknown): string {
@@ -150,27 +150,27 @@ export function normalizeRevenue(raw: Raw): RevenueResponse {
       paid_amount: hasPaid ? t['paid_amount'] : null,
       pending_amount: t['pending_amount'] ?? 0,
       denied_amount: t['denied_amount'] ?? 0,
-      currency: 'INR',
+      currency: 'USD',
     },
     charts: {
       monthly_by_status: {
-        chartType: 'bar', title: 'Claim amount by outcome (₹ Cr)', xKey: 'period', series: stack,
+        chartType: 'bar', title: 'Claim amount by outcome ($M)', xKey: 'period', series: stack,
         data: trend.map(r => ({ period: periodLabel(r['period'], g, multi), Paid: cr(r['paid_amount']), Pending: cr(r['pending_amount']), Denied: cr(r['denied_amount']) })),
-        options: { stacked: true, unit: ' Cr' },
+        options: { stacked: true, unit: ' M' },
       },
-      by_payer_status: { chartType: 'bar', title: 'Claim amount by payer and outcome (₹ Cr)', xKey: 'payer', series: stack, data: outcome(payers, 'payer', 'payer_name'), options: { stacked: true, orientation: 'horizontal', unit: ' Cr' } },
+      by_payer_status: { chartType: 'bar', title: 'Claim amount by payer and outcome ($M)', xKey: 'payer', series: stack, data: outcome(payers, 'payer', 'payer_name'), options: { stacked: true, orientation: 'horizontal', unit: ' M' } },
       pending_by_payer: {
-        chartType: 'bar', title: 'Pending claim amount by payer (₹ Cr)', xKey: 'payer', series: [{ dataKey: 'Pending', label: 'Pending' }],
+        chartType: 'bar', title: 'Pending claim amount by payer ($M)', xKey: 'payer', series: [{ dataKey: 'Pending', label: 'Pending' }],
         data: [...payers].sort((a, b) => (b['pending_amount'] ?? 0) - (a['pending_amount'] ?? 0)).map(r => ({ payer: r['payer_name'], Pending: cr(r['pending_amount']) })),
-        options: { orientation: 'horizontal', unit: ' Cr' },
+        options: { orientation: 'horizontal', unit: ' M' },
       },
       status_mix: {
-        chartType: 'pie', title: 'Total claim amount by outcome (₹ Cr)', xKey: 'status', series: [{ dataKey: 'amount', label: '₹ Cr' }],
+        chartType: 'pie', title: 'Total claim amount by outcome ($M)', xKey: 'status', series: [{ dataKey: 'amount', label: '$M' }],
         data: [{ status: 'Paid', amount: cr(t['paid_amount']) }, { status: 'Pending', amount: cr(t['pending_amount']) }, { status: 'Denied', amount: cr(t['denied_amount']) }].filter(r => r.amount !== null),
-        options: { donut: true, unit: ' Cr' },
+        options: { donut: true, unit: ' M' },
       },
-      by_hospital: { chartType: 'bar', title: 'Submitted vs paid by hospital (₹ Cr)', xKey: 'hospital', series: sp, data: subPaid(arr(raw['by_hospital']), 'hospital', 'hospital_name'), options: { orientation: 'horizontal', unit: ' Cr' } },
-      by_department: { chartType: 'bar', title: 'Submitted vs paid by department (₹ Cr)', xKey: 'department', series: sp, data: subPaid(arr(raw['by_department']), 'department', 'department_name'), options: { unit: ' Cr' } },
+      by_hospital: { chartType: 'bar', title: 'Submitted vs paid by hospital ($M)', xKey: 'hospital', series: sp, data: subPaid(arr(raw['by_hospital']), 'hospital', 'hospital_name'), options: { orientation: 'horizontal', unit: ' M' } },
+      by_department: { chartType: 'bar', title: 'Submitted vs paid by department ($M)', xKey: 'department', series: sp, data: subPaid(arr(raw['by_department']), 'department', 'department_name'), options: { unit: ' M' } },
     },
   };
 }
@@ -286,7 +286,7 @@ export function normalizeDenials(raw: Raw): DenialsResponse {
 }
 
 // ------------------------------------------------------------------- trends
-const TREND_UNIT: Record<string, string> = { percent: '%', days: ' d', currency: ' Cr', currency_inr: ' Cr' };
+const TREND_UNIT: Record<string, string> = { percent: '%', days: ' d', currency: ' M', currency_usd: ' M', usd: ' M' };
 
 export function normalizeTrends(raw: Raw): TrendsResponse {
   if (!raw || raw['chart']) return raw as TrendsResponse;
@@ -294,7 +294,7 @@ export function normalizeTrends(raw: Raw): TrendsResponse {
   const series = arr(raw['series']);
   const allPoints = series.flatMap(s => arr(s['points']));
   const multi = spansYears(allPoints);
-  const isMoney = /currency|inr/i.test(String(raw['unit']));
+  const isMoney = /currency|usd|\$/i.test(String(raw['unit']));
   const val = (v: unknown) => (isMoney ? cr(v) : (v as number | null));
   const grouped = series.length > 1 || !!raw['group_by'];
   const label = raw['label'] ?? raw['metric'];

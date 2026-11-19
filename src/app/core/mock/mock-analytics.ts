@@ -2,7 +2,7 @@
 // (plan -> data -> facts -> insight) and the documented response envelope.
 import { AskRequest, AskResponse, AskStatus, FollowupRequest, HistoryItem, HistoryResponse, VisualizationSpec } from '../models/api.models';
 import {
-  ADMISSIONS_TOTAL, CLAIM_AMOUNT_CR, DENIAL_TARGET, DEPARTMENTS, DEPT_ADMISSIONS, HOSPITALS, LOS_BY_DEPT, LOS_MONTHLY,
+  ADMISSIONS_TOTAL, CLAIM_AMOUNT_M, DENIAL_TARGET, DEPARTMENTS, DEPT_ADMISSIONS, HOSPITALS, LOS_BY_DEPT, LOS_MONTHLY,
   MONTH_LONG, MONTH_SHORT, PAYERS, fmtInt, pendingByPayer, pendingByPayerAndHospital, periodLabel, round1, scopeLabel, seeded, sum,
 } from './mock-data';
 
@@ -114,10 +114,10 @@ function execute(plan: Plan): { chart: VisualizationSpec; facts: Record<string, 
     const pct = round1(((b - a) / a) * 100);
     const peakI = vals.indexOf(Math.max(...vals));
     const verb = b >= a ? 'rose' : 'fell';
-    const fmt = (n: number) => (unit === ' Cr' ? `₹${round1(n)} Cr` : fmtInt(n));
+    const fmt = (n: number) => (unit === ' M' ? `$${round1(n)}M` : fmtInt(n));
     return {
       facts: {
-        Total: unit === ' Cr' ? `₹${round1(sum(vals))} Cr` : fmtInt(sum(vals)),
+        Total: unit === ' M' ? `$${round1(sum(vals))}M` : fmtInt(sum(vals)),
         [`${MONTH_SHORT[months[0]]} → ${MONTH_SHORT[months[months.length - 1]]}`]: `${pct >= 0 ? '+' : ''}${pct}%`,
         Peak: `${MONTH_SHORT[months[peakI]]} · ${fmt(vals[peakI])}`,
       },
@@ -195,14 +195,14 @@ function execute(plan: Plan): { chart: VisualizationSpec; facts: Record<string, 
 
   if (metric === 'claim_amount') {
     if (dims.includes('hospital')) {
-      const data = months.flatMap(i => HOSPITALS.map(h => ({ month: MONTH_SHORT[i], hospital: h.name, amountCr: round1(CLAIM_AMOUNT_CR[i] * h.share) })));
-      const t = trendInsight(months.map(i => CLAIM_AMOUNT_CR[i]), 'Total claim amount', ' Cr');
-      return { chart: { chartType: 'line', title: 'Monthly claim amount by hospital (₹ Cr)', xKey: 'month', seriesKey: 'hospital', series: [{ dataKey: 'amountCr', label: '₹ Cr' }], data, options: { unit: ' Cr' } }, ...t };
+      const data = months.flatMap(i => HOSPITALS.map(h => ({ month: MONTH_SHORT[i], hospital: h.name, amountM: round1(CLAIM_AMOUNT_M[i] * h.share) })));
+      const t = trendInsight(months.map(i => CLAIM_AMOUNT_M[i]), 'Total claim amount', ' M');
+      return { chart: { chartType: 'line', title: 'Monthly claim amount by hospital ($M)', xKey: 'month', seriesKey: 'hospital', series: [{ dataKey: 'amountM', label: '$M' }], data, options: { unit: ' M' } }, ...t };
     }
-    const vals = months.map(i => round1(CLAIM_AMOUNT_CR[i] * k));
-    const t = trendInsight(vals, 'Claim amount', ' Cr');
-    return { chart: { chartType: 'line', title: 'Monthly claim amount (₹ Cr)', xKey: 'month', series: [{ dataKey: 'amountCr', label: '₹ Cr' }],
-      data: months.map((i, j) => ({ month: MONTH_SHORT[i], amountCr: vals[j] })), options: { area: true, unit: ' Cr', markPeak: true } }, ...t };
+    const vals = months.map(i => round1(CLAIM_AMOUNT_M[i] * k));
+    const t = trendInsight(vals, 'Claim amount', ' M');
+    return { chart: { chartType: 'line', title: 'Monthly claim amount ($M)', xKey: 'month', series: [{ dataKey: 'amountM', label: '$M' }],
+      data: months.map((i, j) => ({ month: MONTH_SHORT[i], amountM: vals[j] })), options: { area: true, unit: ' M', markPeak: true } }, ...t };
   }
 
   if (metric === 'avg_los') {

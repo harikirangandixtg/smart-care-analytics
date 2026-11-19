@@ -20,7 +20,8 @@ export class ShellComponent {
     // AI Insights is hidden from the menu; the /insights route still works.
     // { path: '/insights', label: 'AI Insights', icon: 'M12 3l1.8 4.7L18.5 9l-4.7 1.8L12 15.5l-1.8-4.7L5.5 9l4.7-1.3zM18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z' },
     { path: '/reports', label: 'Reports and Export', icon: 'M12 3v12M7 10l5 5 5-5M4 17v3h16v-3' },
-    { path: '/agents', label: 'Agent Monitor', icon: 'M9 3h6v4H9zM4 11h16v10H4zM9 15h.01M15 15h.01M12 7v4' },
+    // Agent Monitor is hidden from the menu; the /agents route still works.
+    // { path: '/agents', label: 'Agent Monitor', icon: 'M9 3h6v4H9zM4 11h16v10H4zM9 15h.01M15 15h.01M12 7v4' },
     { path: '/history', label: 'Query History', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2' },
   ];
 }

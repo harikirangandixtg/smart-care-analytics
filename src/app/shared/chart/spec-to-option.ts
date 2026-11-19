@@ -26,7 +26,7 @@ const axisCommon = {
 };
 
 const fmt = (unit = '') => (v: number) =>
-  unit === '%' ? `${v}%` : unit === ' Cr' ? `₹${typeof v === 'number' ? +v.toFixed(2) : v} Cr` : `${typeof v === 'number' ? v.toLocaleString('en-IN') : v}${unit}`;
+  unit === '%' ? `${v}%` : unit === ' M' ? `$${typeof v === 'number' ? +v.toFixed(2) : v}M` : `${typeof v === 'number' ? v.toLocaleString('en-US') : v}${unit}`;
 
 const unique = <T>(xs: T[]) => [...new Set(xs)];
 const num = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0));
@@ -127,7 +127,7 @@ function heatmap(spec: VisualizationSpec): EChartsCoreOption {
   const values = spec.data.map(r => num(r[key]));
   return {
     ...base(),
-    tooltip: { position: 'top', formatter: (p: { value: [number, number, number] }) => `${ys[p.value[1]]} · ${xs[p.value[0]]}<br/><b>${p.value[2].toLocaleString('en-IN')}</b> ${spec.series[0].label.toLowerCase()}` },
+    tooltip: { position: 'top', formatter: (p: { value: [number, number, number] }) => `${ys[p.value[1]]} · ${xs[p.value[0]]}<br/><b>${p.value[2].toLocaleString('en-US')}</b> ${spec.series[0].label.toLowerCase()}` },
     grid: { left: 12, right: 12, top: 8, bottom: 52, containLabel: true },
     xAxis: { type: 'category', data: xs, ...axisCommon, splitArea: { show: false }, splitLine: { show: false } },
     yAxis: { type: 'category', data: ys, inverse: true, ...axisCommon, axisLabel: { color: PALETTE.ink, fontSize: 12 }, splitLine: { show: false } },
@@ -142,7 +142,7 @@ function sankey(spec: VisualizationSpec): EChartsCoreOption {
   const names = unique(spec.data.flatMap(r => [String(r['source']), String(r['target'])]));
   return {
     ...base(),
-    tooltip: { trigger: 'item', valueFormatter: (v: number) => `${v.toLocaleString('en-IN')} claims` },
+    tooltip: { trigger: 'item', valueFormatter: (v: number) => `${v.toLocaleString('en-US')} claims` },
     series: [{
       type: 'sankey', left: 150, right: 110, top: 8, bottom: 8, nodeWidth: 14, nodeGap: 12, draggable: false,
       layoutIterations: 0, // keep the API's order: payers top-down, Paid / Denied / Pending
@@ -154,7 +154,7 @@ function sankey(spec: VisualizationSpec): EChartsCoreOption {
       })),
       links: spec.data.map(r => ({ source: r['source'], target: r['target'], value: num(r['value']) })),
       lineStyle: { color: 'target', opacity: 0.28, curveness: 0.5 },
-      label: { color: PALETTE.ink, fontSize: 12, formatter: (p: { name: string; value: number }) => STATUS_COLOURS[p.name] ? `{b|${p.name}}\n${p.value.toLocaleString('en-IN')}` : p.name, rich: { b: { fontWeight: 600 } } },
+      label: { color: PALETTE.ink, fontSize: 12, formatter: (p: { name: string; value: number }) => STATUS_COLOURS[p.name] ? `{b|${p.name}}\n${p.value.toLocaleString('en-US')}` : p.name, rich: { b: { fontWeight: 600 } } },
     }],
   };
 }
@@ -241,6 +241,7 @@ export function specProblem(spec: VisualizationSpec | null | undefined): string 
   if (!SUPPORTED.includes(spec.chartType)) return `Chart type “${spec.chartType}” isn't supported; showing the table instead.`;
   if (spec.chartType === 'sankey') return spec.data.every(r => 'source' in r && 'target' in r && 'value' in r) ? null : 'The flow chart data is incomplete; showing the table instead.';
   if (spec.chartType === 'gauge' || spec.chartType === 'table') return null;
+  if (!spec.series?.length || !spec.series[0]?.dataKey) return 'The chart has no measure to plot; showing the table instead.';
   const keys = new Set(Object.keys(spec.data[0]));
   if (spec.xKey && !keys.has(spec.xKey)) return `Field “${spec.xKey}” is missing from the data; showing the table instead.`;
   if (spec.seriesKey && !keys.has(spec.seriesKey)) return `Field “${spec.seriesKey}” is missing from the data; showing the table instead.`;

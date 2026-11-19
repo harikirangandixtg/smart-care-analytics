@@ -87,7 +87,7 @@ src/app/
 - **Logo**: `public/xt-global-logo.png` was cut from a screenshot; replace it with the original file (same name).
 - **Auth**: add an Entra ID (MSAL) bearer-token interceptor before `sessionInterceptor` in `app.config.ts`.
 - **Mock data**: the same synthetic dataset as the design canvas (11,065 admissions, 13,280 claims, 1,345 denied,
-  ₹48.6 Cr billed, Jan–Oct 2026). History lives in memory and resets on reload.
+  $48.6M billed, Jan–Oct 2026). History lives in memory and resets on reload.
 
 ## Deploying to Azure App Service (Kudu zip deploy)
 

@@ -105,6 +105,6 @@ export class InsightsPage {
   }
   private date(s?: string): string {
     const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s ?? '');
-    return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : s ?? '';
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : s ?? '';
   }
 }

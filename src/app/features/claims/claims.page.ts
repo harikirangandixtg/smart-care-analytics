@@ -6,7 +6,7 @@ import { FiltersStore } from '../../core/state/filters.store';
 import { requestState } from '../../core/utils/request-state';
 import { ChartComponent } from '../../shared/chart/chart.component';
 import { FilterBarComponent } from '../../shared/filter-bar/filter-bar.component';
-import { inr, pct } from '../../shared/format/format';
+import { usd, pct } from '../../shared/format/format';
 import { PageHeaderComponent } from '../../shared/page-header/page-header.component';
 import { QuestionListComponent } from '../../shared/question-list/question-list.component';
 import { StatCardComponent } from '../../shared/stat-card/stat-card.component';
@@ -25,7 +25,7 @@ import { StatCardComponent } from '../../shared/stat-card/stat-card.component';
 export class ClaimsPage {
   private readonly api = inject(DashboardService);
   private readonly store = inject(FiltersStore);
-  protected readonly inr = inr;
+  protected readonly usd = usd;
   protected readonly pct = pct;
 
   protected readonly pageSize = 8;

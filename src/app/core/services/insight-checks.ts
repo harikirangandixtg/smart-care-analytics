@@ -34,7 +34,7 @@ const title = (k: string) => k.replace(/_/g, ' ').replace(/^./, c => c.toUpperCa
 function unitOf(res: AskResponse, key: string): Unit {
   const u = String((res as unknown as { unit?: string }).unit ?? res.chart?.options?.unit ?? '').trim().toLowerCase();
   if (u === '%' || u === 'percent' || /rate|pct|share/.test(key)) return 'percent';
-  if (/amount|revenue|inr|₹/.test(key) || u === 'currency' || u === 'inr') return 'currency';
+  if (/amount|revenue|usd|\$/.test(key) || u === 'currency' || u === 'usd' || u === '$' || u === 'm') return 'currency';
   if (/los|length_of_stay|days/.test(key) || u === 'd' || u === 'days') return 'days';
   return 'count';
 }
@@ -43,8 +43,8 @@ export function fmt(v: number | null | undefined, unit: Unit): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return '—';
   if (unit === 'percent') return `${v.toFixed(2)}%`;
   if (unit === 'days') return `${v.toFixed(2)} days`;
-  if (unit === 'currency') return Math.abs(v) >= 1e7 ? `₹${(v / 1e7).toFixed(2)} Cr` : Math.abs(v) >= 1e5 ? `₹${(v / 1e5).toFixed(2)} L` : `₹${Math.round(v).toLocaleString('en-IN')}`;
-  return Number.isInteger(v) ? v.toLocaleString('en-IN') : v.toLocaleString('en-IN', { maximumFractionDigits: Math.abs(v) >= 100 ? 1 : 2 });
+  if (unit === 'currency') return Math.abs(v) >= 1e9 ? `$${(v / 1e9).toFixed(2)}B` : Math.abs(v) >= 1e6 ? `$${(v / 1e6).toFixed(2)}M` : `$${Math.round(v).toLocaleString('en-US')}`;
+  return Number.isInteger(v) ? v.toLocaleString('en-US') : v.toLocaleString('en-US', { maximumFractionDigits: Math.abs(v) >= 100 ? 1 : 2 });
 }
 /** Difference wording: percentage points for rates, % change otherwise. */
 function delta(a: number, b: number, unit: Unit): string {
@@ -104,7 +104,7 @@ export function checkGrounding(texts: string[], res: AskResponse): Grounding {
   for (const t of texts) {
     // strip dates, years and ordinals first: they are context, not figures
     const clean = t.replace(/\b\d{4}-\d{2}(-\d{2})?\b/g, ' ').replace(/\b(19|20)\d{2}\b/g, ' ').replace(/\b\d+(st|nd|rd|th)\b/gi, ' ');
-    for (const m of clean.matchAll(/(₹\s?)?(\d[\d,]*(?:\.\d+)?)\s*(%|cr\b|crore|lakh|l\b|days?|x\b|times)?/gi)) {
+    for (const m of clean.matchAll(/(\$\s?)?(\d[\d,]*(?:\.\d+)?)\s*(%|bn\b|billion|b\b|million|mn\b|m\b|thousand|k\b|days?|x\b|times)?/gi)) {
       const raw = m[0].trim();
       const v0 = parseFloat(m[2].replace(/,/g, ''));
       if (!Number.isFinite(v0)) continue;
@@ -114,8 +114,9 @@ export function checkGrounding(texts: string[], res: AskResponse): Grounding {
       // bounds and references ("below 8%", "between 4% and 8%", "the 8% denial target", "more than 30 days")
       if (/(below|above|under|over|between|than|at least|at most|up to|within|target(?: of)?|threshold(?: of)?|\d%? and)\s*$/i.test(before) || /^\s*(?:\w+\s)?(target|threshold|benchmark|limit)\b/i.test(after)) { bounds.push(raw); continue; }
       checked++;
-      const scale = /cr|crore/i.test(m[3] ?? '') ? 1e7 : /lakh|^l$/i.test(m[3] ?? '') ? 1e5 : 1;
-      // amounts: rounded to 2 dp in the unit written, and the column may hold rupees or crore already
+      const u = (m[3] ?? '').toLowerCase();
+      const scale = /^(b|bn|billion)$/.test(u) ? 1e9 : /^(m|mn|million)$/.test(u) ? 1e6 : /^(k|thousand)$/.test(u) ? 1e3 : 1;
+      // amounts: rounded to 2 dp in the unit written, and the column may hold dollars or $ millions already
       const ok = (v: number, rel: number, abs: number) => near(cells, v, rel, abs) || near(totals, v, rel, abs);
       if (scale > 1 ? ok(v0 * scale, 0.01, 0.006 * scale) || ok(v0, 0.01, 0.006) : ok(v0, 0.002, 0.051)) continue;
       // a change / difference / ratio is accepted only when the text presents it as one

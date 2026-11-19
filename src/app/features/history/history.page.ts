@@ -94,6 +94,6 @@ export class HistoryPage {
     const d = new Date(iso), t = new Date();
     const start = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
     const diff = Math.round((start(t) - start(d)) / 86_400_000);
-    return diff === 0 ? 'Today' : diff === 1 ? 'Yesterday' : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    return diff === 0 ? 'Today' : diff === 1 ? 'Yesterday' : d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
   }
 }

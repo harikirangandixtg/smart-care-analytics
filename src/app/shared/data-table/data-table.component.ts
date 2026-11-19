@@ -33,6 +33,6 @@ export class DataTableComponent {
   protected readonly columns = computed(() => specColumns(this.spec()));
   protected display(v: unknown, numeric: boolean): string {
     if (v === null || v === undefined) return '—';
-    return numeric && typeof v === 'number' ? v.toLocaleString('en-IN') : String(v);
+    return numeric && typeof v === 'number' ? v.toLocaleString('en-US') : String(v);
   }
 }

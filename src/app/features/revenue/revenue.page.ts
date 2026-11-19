@@ -6,12 +6,12 @@ import { FiltersStore } from '../../core/state/filters.store';
 import { requestState } from '../../core/utils/request-state';
 import { ChartComponent } from '../../shared/chart/chart.component';
 import { FilterBarComponent } from '../../shared/filter-bar/filter-bar.component';
-import { inr, pct } from '../../shared/format/format';
+import { usd, pct } from '../../shared/format/format';
 import { PageHeaderComponent } from '../../shared/page-header/page-header.component';
 import { QuestionListComponent } from '../../shared/question-list/question-list.component';
 import { StatCardComponent } from '../../shared/stat-card/stat-card.component';
 
-const cr = (v: number | null) => (v === null ? null : Math.round((v / 1e7) * 100) / 100);
+const cr = (v: number | null) => (v === null ? null : Math.round((v / 1e6) * 100) / 100); // $ millions
 
 /** Builds a submitted-vs-paid chart from aggregate rows (mapping only; no measures are calculated here). */
 function submittedVsPaid(res: DimensionResponse | undefined, title: string, key: string, horizontal: boolean): VisualizationSpec | null {
@@ -21,7 +21,7 @@ function submittedVsPaid(res: DimensionResponse | undefined, title: string, key:
     chartType: 'bar', title, xKey: key,
     series: hasPaid ? [{ dataKey: 'Submitted', label: 'Submitted' }, { dataKey: 'Paid', label: 'Paid' }] : [{ dataKey: 'Submitted', label: 'Submitted' }],
     data: res.rows.map(r => ({ [key]: r.name, Submitted: cr(r.submitted_amount), Paid: cr(r.paid_amount) })),
-    options: { orientation: horizontal ? 'horizontal' : 'vertical', unit: ' Cr' },
+    options: { orientation: horizontal ? 'horizontal' : 'vertical', unit: ' M' },
   };
 }
 
@@ -35,15 +35,15 @@ function submittedVsPaid(res: DimensionResponse | undefined, title: string, key:
 export class RevenuePage {
   private readonly api = inject(DashboardService);
   private readonly store = inject(FiltersStore);
-  protected readonly inr = inr;
+  protected readonly usd = usd;
   protected readonly pct = pct;
 
   protected readonly revenue = requestState(computed(() => ({ f: this.store.filters(), g: this.store.granularity() })), ({ f, g }) => this.api.revenue(f, g));
   protected readonly hospitals = requestState(this.store.filters, f => this.api.hospitals(f));
   protected readonly departments = requestState(this.store.filters, f => this.api.departments(f));
 
-  protected readonly hospitalChart = computed(() => this.revenue().data?.charts?.['by_hospital'] ?? submittedVsPaid(this.hospitals().data, 'Submitted vs paid by hospital (₹ Cr)', 'hospital', true));
-  protected readonly departmentChart = computed(() => this.revenue().data?.charts?.['by_department'] ?? submittedVsPaid(this.departments().data, 'Submitted vs paid by department (₹ Cr)', 'department', false));
+  protected readonly hospitalChart = computed(() => this.revenue().data?.charts?.['by_hospital'] ?? submittedVsPaid(this.hospitals().data, 'Submitted vs paid by hospital ($M)', 'hospital', true));
+  protected readonly departmentChart = computed(() => this.revenue().data?.charts?.['by_department'] ?? submittedVsPaid(this.departments().data, 'Submitted vs paid by department ($M)', 'department', false));
 
   protected readonly questions = [
     { question: 'Show pending claim amounts by payer', shownAs: 'Horizontal bar chart' },

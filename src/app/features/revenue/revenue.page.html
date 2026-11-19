@@ -12,10 +12,10 @@
 
   <section class="stat-grid stat-grid-4" appBalancedGrid="220" aria-label="Claim amount totals">
     @if (revenue().data?.totals; as t) {
-      <app-stat-card label="Submitted claim amount" [value]="inr(t.submitted_amount)" note="Billed to payers · not revenue" accent="#A9C6E8" />
-      <app-stat-card label="Paid amount" [value]="t.paid_amount === null ? 'Not available' : inr(t.paid_amount)" [note]="t.paid_amount === null ? 'No payment data in this source' : pct(t.paid_amount, t.submitted_amount) + ' of submitted · recognised revenue'" />
-      <app-stat-card label="Pending amount" [value]="inr(t.pending_amount)" [note]="pct(t.pending_amount, t.submitted_amount) + ' · awaiting payer decision'" accent="#98A2B0" />
-      <app-stat-card label="Denied amount" [value]="inr(t.denied_amount)" [note]="pct(t.denied_amount, t.submitted_amount) + ' · rejected by payers'" accent="#C8661C" />
+      <app-stat-card label="Submitted claim amount" [value]="usd(t.submitted_amount)" note="Billed to payers · not revenue" accent="#A9C6E8" />
+      <app-stat-card label="Paid amount" [value]="t.paid_amount === null ? 'Not available' : usd(t.paid_amount)" [note]="t.paid_amount === null ? 'No payment data in this source' : pct(t.paid_amount, t.submitted_amount) + ' of submitted · recognised revenue'" />
+      <app-stat-card label="Pending amount" [value]="usd(t.pending_amount)" [note]="pct(t.pending_amount, t.submitted_amount) + ' · awaiting payer decision'" accent="#98A2B0" />
+      <app-stat-card label="Denied amount" [value]="usd(t.denied_amount)" [note]="pct(t.denied_amount, t.submitted_amount) + ' · rejected by payers'" accent="#C8661C" />
     } @else if (revenue().loading) {
       @for (i of [1, 2, 3, 4]; track i) { <div class="stat-card skeleton"></div> }
     }
@@ -32,7 +32,7 @@
         <app-chart [spec]="r.charts?.['by_payer_status']" [height]="320" />
       </section>
       <section class="card">
-        <div class="card-head"><div><h2>Pending claim amount by payer</h2><p class="muted">{{ inr(r.totals?.pending_amount ?? 0) }} awaiting payer decision</p></div><span class="ask-hint">Ask: “Show pending claim amounts by payer”</span></div>
+        <div class="card-head"><div><h2>Pending claim amount by payer</h2><p class="muted">{{ usd(r.totals?.pending_amount ?? 0) }} awaiting payer decision</p></div><span class="ask-hint">Ask: “Show pending claim amounts by payer”</span></div>
         <app-chart [spec]="r.charts?.['pending_by_payer']" [height]="320" />
       </section>
       <!-- GET /api/dashboard/hospitals -->

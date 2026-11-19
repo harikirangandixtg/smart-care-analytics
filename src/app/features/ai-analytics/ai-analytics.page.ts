@@ -135,7 +135,7 @@ export class AiAnalyticsPage implements OnInit {
   protected cell(v: unknown, col = ''): string {
     if (v === null || v === undefined) return '—';
     if (typeof v !== 'number') return String(v);
-    const n = v.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+    const n = v.toLocaleString('en-US', { maximumFractionDigits: 2 });
     return /(rate|percent|percentage|pct|share)$/i.test(col) ? `${n}%` : n;
   }
   protected colLabel(c: string): string { return c.replace(/_/g, ' ').replace(/^./, x => x.toUpperCase()); }

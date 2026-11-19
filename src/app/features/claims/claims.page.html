@@ -82,7 +82,7 @@
                   <td><span class="strong">{{ r.code }}</span>@if (r.description) { <div class="muted small">{{ r.description }}</div> }</td>
                   <td class="num nowrap">{{ r.count | number }}</td>
                   <td class="num nowrap">{{ r.share }}%</td>
-                  <td class="num nowrap">{{ r.amount !== null && r.amount !== undefined ? inr(r.amount) : '—' }}</td>
+                  <td class="num nowrap">{{ r.amount !== null && r.amount !== undefined ? usd(r.amount) : '—' }}</td>
                 </tr>
               } @empty { <tr><td colspan="4" class="muted">No denials in this period.</td></tr> }
             </tbody>
@@ -112,7 +112,7 @@
             @for (c of p.items ?? []; track c.claim_id) {
               <tr>
                 <td class="mono nowrap">{{ c.claim_id }}</td><td>{{ c.hospital_name }}</td><td>{{ c.department_name }}</td><td>{{ c.payer_name }}</td>
-                <td class="num nowrap">{{ inr(c.claim_amount) }}</td><td class="muted nowrap">{{ c.aging_band ?? '—' }}</td>
+                <td class="num nowrap">{{ usd(c.claim_amount) }}</td><td class="muted nowrap">{{ c.aging_band ?? '—' }}</td>
                 <td class="num"><span class="pill" [class.pill-warn]="(c.days_pending ?? 0) > 60">{{ c.days_pending }} days</span></td>
               </tr>
             } @empty { <tr><td colspan="7" class="muted">No pending claims for these filters.</td></tr> }

@@ -1,5 +1,5 @@
 // Static synthetic POC data, served by the mock interceptor in the shapes from api.models.ts.
-// Same dataset as the canvas designs: 11,065 admissions, 13,280 claims, 1,345 denied, ₹48.6 Cr billed (Jan–Oct 2026).
+// Same dataset as the canvas designs: 11,065 admissions, 13,280 claims, 1,345 denied, $48.6M billed (Jan–Oct 2026).
 import {
   AdmissionsResponse, ClaimRow, ClaimsResponse, DashboardFilters, DenialsResponse, DimensionResponse, DimensionRow,
   Granularity, GroupBy, Kpi, MetricDef, NamedEntity, RevenueResponse, SummaryResponse, TrendsResponse, VisualizationSpec,
@@ -61,12 +61,12 @@ export const CARC = [
 ];
 const DEPT_DENIAL: Record<string, number> = { Oncology: 13.6, Cardiology: 11.8, Neurology: 10.9, Orthopedics: 9.4, Gastroenterology: 9.0, Pulmonology: 8.8, 'General Medicine': 8.1, Pediatrics: 6.2 };
 
-// Revenue (₹ crore per month): submitted, and the denied / pending share of each month.
-export const CLAIM_AMOUNT_CR = [4.3, 4.4, 4.6, 4.5, 4.8, 4.9, 5.1, 5.0, 5.4, 5.6];
+// Revenue ($ millions per month): submitted, and the denied / pending share of each month.
+export const CLAIM_AMOUNT_M = [4.3, 4.4, 4.6, 4.5, 4.8, 4.9, 5.1, 5.0, 5.4, 5.6];
 const DENIED_SHARE = [8.6, 8.8, 9.0, 9.2, 9.6, 9.8, 10.2, 10.4, 10.8, 11.0];
 const PENDING_SHARE = [0.6, 0.6, 0.8, 0.8, 1.0, 1.4, 2.4, 5.0, 10.5, 21.0];
 const DEPT_AMOUNT_SHARE: Record<string, number> = { Cardiology: 0.22, Oncology: 0.19, Orthopedics: 0.17, Neurology: 0.14, 'General Medicine': 0.11, Gastroenterology: 0.07, Pediatrics: 0.05, Pulmonology: 0.05 };
-const CR = 1e7; // rupees per crore
+const CR = 1e6; // dollars per million
 
 // ------------------------------------------------------------------- helpers
 export function seeded(seed: number): () => number {
@@ -78,7 +78,7 @@ export function seeded(seed: number): () => number {
   };
 }
 export const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
-export const fmtInt = (n: number) => Math.round(n).toLocaleString('en-IN');
+export const fmtInt = (n: number) => Math.round(n).toLocaleString('en-US');
 export const round1 = (n: number) => Math.round(n * 10) / 10;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -116,10 +116,10 @@ export const metrics = (): MetricDef[] => [
   { key: 'avg_los', label: 'Average length of stay', unit: 'days' },
   { key: 'claims', label: 'Claims', unit: 'count' },
   { key: 'denial_rate', label: 'Denial rate', unit: 'percent', description: 'Denied claims ÷ adjudicated + pending claims' },
-  { key: 'submitted_amount', label: 'Submitted claim amount', unit: 'currency_inr', description: 'Billed to payers; not revenue' },
-  { key: 'paid_amount', label: 'Paid amount', unit: 'currency_inr', description: 'Recognised revenue' },
-  { key: 'pending_amount', label: 'Pending amount', unit: 'currency_inr' },
-  { key: 'denied_amount', label: 'Denied amount', unit: 'currency_inr' },
+  { key: 'submitted_amount', label: 'Submitted claim amount', unit: 'currency', description: 'Billed to payers; not revenue' },
+  { key: 'paid_amount', label: 'Paid amount', unit: 'currency', description: 'Recognised revenue' },
+  { key: 'pending_amount', label: 'Pending amount', unit: 'currency' },
+  { key: 'denied_amount', label: 'Denied amount', unit: 'currency' },
 ];
 
 // ------------------------------------------------------------------- summary
@@ -127,13 +127,13 @@ export function summary(f: DashboardFilters): SummaryResponse {
   const s = scope(f);
   const adm = s.months.map(i => admSeries(s.dept)[i] * s.hk);
   const claims = s.months.map(i => CLAIMS_MONTHLY[i] * s.hk * s.deptShare * s.payerShare);
-  const amount = s.months.map(i => CLAIM_AMOUNT_CR[i] * s.hk * s.deptShare * s.payerShare);
+  const amount = s.months.map(i => CLAIM_AMOUNT_M[i] * s.hk * s.deptShare * s.payerShare);
   const denial = s.payer ? s.payer.denial : round1(sum(PAYER_CLAIMS.map(p => p.denied)) / sum(PAYER_CLAIMS.map(p => p.total)) * 100);
   const los = s.dept ? DEPT_LOS[s.dept] : round1(sum(s.months.map(i => LOS_MONTHLY[i])) / s.months.length);
   const kpis: Kpi[] = [
     { key: 'admissions', label: 'Admissions', value: Math.round(sum(adm)), unit: 'count', change: { label: '+6.2%', direction: 'up', favourable: true }, sparkline: adm.map(Math.round) },
     { key: 'patients', label: 'Unique patients', value: Math.round(sum(adm) * 0.67), unit: 'count', change: { label: '+4.8%', direction: 'up', favourable: true }, sparkline: adm.map(v => Math.round(v * 0.67)) },
-    { key: 'submitted_amount', label: 'Claim amount (submitted)', value: Math.round(sum(amount) * CR), unit: 'currency_inr', note: 'Billed, not revenue', change: { label: '+7.9%', direction: 'up', favourable: true }, sparkline: amount.map(round2) },
+    { key: 'submitted_amount', label: 'Claim amount (submitted)', value: Math.round(sum(amount) * CR), unit: 'currency', note: 'Billed, not revenue', change: { label: '+7.9%', direction: 'up', favourable: true }, sparkline: amount.map(round2) },
     { key: 'claims', label: 'Claims', value: Math.round(sum(claims)), unit: 'count', change: { label: '+5.1%', direction: 'up', favourable: true }, sparkline: claims.map(Math.round) },
     { key: 'denial_rate', label: 'Denial rate', value: denial, unit: 'percent', change: { label: '+1.3 pts', direction: 'up', favourable: false }, sparkline: s.months.map(i => DENIAL_RATE_MONTHLY[i]) },
     { key: 'avg_los', label: 'Avg length of stay', value: los, unit: 'days', change: { label: '+0.3 d', direction: 'up', favourable: false }, sparkline: s.months.map(i => LOS_MONTHLY[i]) },
@@ -203,7 +203,7 @@ export function admissions(f: DashboardFilters, g: Granularity, top: number): Ad
 // ------------------------------------------------------------------- revenue
 function revenueMonths(f: DashboardFilters) {
   const s = scope(f); const k = s.hk * s.deptShare * s.payerShare;
-  const sub = s.months.map(i => CLAIM_AMOUNT_CR[i] * k);
+  const sub = s.months.map(i => CLAIM_AMOUNT_M[i] * k);
   const den = s.months.map((i, j) => (sub[j] * DENIED_SHARE[i]) / 100);
   const pen = s.months.map((i, j) => (sub[j] * PENDING_SHARE[i]) / 100);
   const paid = sub.map((v, j) => v - den[j] - pen[j]);
@@ -223,12 +223,12 @@ export function revenue(f: DashboardFilters, top: number): RevenueResponse {
   }).slice(0, top);
   return {
     period: s.period, last_refreshed: now(),
-    totals: { submitted_amount: Math.round(tS * CR), paid_amount: Math.round(tPaid * CR), pending_amount: Math.round(tP * CR), denied_amount: Math.round(tD * CR), currency: 'INR' },
+    totals: { submitted_amount: Math.round(tS * CR), paid_amount: Math.round(tPaid * CR), pending_amount: Math.round(tP * CR), denied_amount: Math.round(tD * CR), currency: 'USD' },
     charts: {
-      monthly_by_status: { chartType: 'bar', title: `Claim amount by outcome, ${pl} (₹ Cr)`, xKey: 'month', series: [{ dataKey: 'paid', label: 'Paid' }, { dataKey: 'pending', label: 'Pending' }, { dataKey: 'denied', label: 'Denied' }], data: s.months.map((i, j) => ({ month: MONTH_SHORT[i], paid: round2(paid[j]), pending: round2(pen[j]), denied: round2(den[j]) })), options: { stacked: true, unit: ' Cr' } },
-      by_payer_status: { chartType: 'bar', title: `Claim amount by payer and outcome (₹ Cr)`, xKey: 'payer', series: [{ dataKey: 'paid', label: 'Paid' }, { dataKey: 'pending', label: 'Pending' }, { dataKey: 'denied', label: 'Denied' }], data: payerRows, options: { stacked: true, orientation: 'horizontal', unit: ' Cr' } },
-      pending_by_payer: { chartType: 'bar', title: 'Pending claim amount by payer (₹ Cr)', xKey: 'payer', series: [{ dataKey: 'pending', label: 'Pending' }], data: [...payerRows].sort((a, b) => b.pending - a.pending).map(r => ({ payer: r.payer, pending: r.pending })), options: { orientation: 'horizontal', unit: ' Cr' } },
-      status_mix: { chartType: 'pie', title: 'Total claim amount by outcome (₹ Cr)', xKey: 'status', series: [{ dataKey: 'amount', label: '₹ Cr' }], data: [{ status: 'Paid', amount: round2(tPaid) }, { status: 'Pending', amount: round2(tP) }, { status: 'Denied', amount: round2(tD) }], options: { donut: true, unit: ' Cr' } },
+      monthly_by_status: { chartType: 'bar', title: `Claim amount by outcome, ${pl} ($M)`, xKey: 'month', series: [{ dataKey: 'paid', label: 'Paid' }, { dataKey: 'pending', label: 'Pending' }, { dataKey: 'denied', label: 'Denied' }], data: s.months.map((i, j) => ({ month: MONTH_SHORT[i], paid: round2(paid[j]), pending: round2(pen[j]), denied: round2(den[j]) })), options: { stacked: true, unit: ' M' } },
+      by_payer_status: { chartType: 'bar', title: `Claim amount by payer and outcome ($M)`, xKey: 'payer', series: [{ dataKey: 'paid', label: 'Paid' }, { dataKey: 'pending', label: 'Pending' }, { dataKey: 'denied', label: 'Denied' }], data: payerRows, options: { stacked: true, orientation: 'horizontal', unit: ' M' } },
+      pending_by_payer: { chartType: 'bar', title: 'Pending claim amount by payer ($M)', xKey: 'payer', series: [{ dataKey: 'pending', label: 'Pending' }], data: [...payerRows].sort((a, b) => b.pending - a.pending).map(r => ({ payer: r.payer, pending: r.pending })), options: { orientation: 'horizontal', unit: ' M' } },
+      status_mix: { chartType: 'pie', title: 'Total claim amount by outcome ($M)', xKey: 'status', series: [{ dataKey: 'amount', label: '$M' }], data: [{ status: 'Paid', amount: round2(tPaid) }, { status: 'Pending', amount: round2(tP) }, { status: 'Denied', amount: round2(tD) }], options: { donut: true, unit: ' M' } },
     },
   };
 }

@@ -15,11 +15,11 @@ import { specProblem, toEchartsOption } from './spec-to-option';
   template: `
     @if (!spec() || !spec()!.data.length) {
       <div class="empty-state" [style.min-height.px]="height() * 0.6">{{ problem() }}</div>
-    } @else if (view() === 'table' || spec()!.chartType === 'table' || problem()) {
-      @if (problem() && view() !== 'table') { <p class="muted small">{{ problem() }}</p> }
+    } @else if (view() === 'table' || spec()!.chartType === 'table' || problem() || !built().ok) {
+      @if ((problem() || !built().ok) && view() !== 'table') { <p class="muted small">{{ problem() ?? 'This chart could not be drawn; showing the table instead.' }}</p> }
       <app-data-table [spec]="spec()!" />
     } @else {
-      <div echarts [options]="option()" [autoResize]="true" class="chart" [style.height.px]="effectiveHeight()" role="img" [attr.aria-label]="spec()!.title"></div>
+      <div echarts [options]="built().option" [autoResize]="true" class="chart" [style.height.px]="effectiveHeight()" role="img" [attr.aria-label]="spec()!.title"></div>
     }
   `,
   styles: `.chart { width: 100%; }`,
@@ -36,5 +36,11 @@ export class ChartComponent {
   });
   readonly view = input<'chart' | 'table'>('chart');
   protected readonly problem = computed(() => specProblem(this.spec()));
-  protected readonly option = computed(() => (this.spec() ? toEchartsOption(this.spec()!) : {}));
+  /** Never leave an empty card: if building the chart throws, fall back to the table. */
+  protected readonly built = computed(() => {
+    const s = this.spec();
+    if (!s || this.problem()) return { ok: true, option: {} };
+    try { return { ok: true, option: toEchartsOption(s) }; }
+    catch (e) { console.warn('Chart could not be drawn; showing the table instead.', e, s); return { ok: false, option: {} }; }
+  });
 }

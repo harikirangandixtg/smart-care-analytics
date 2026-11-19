@@ -57,7 +57,7 @@ export interface VisualizationSpec {
   options?: {
     orientation?: 'vertical' | 'horizontal';
     stacked?: boolean;
-    unit?: string;              // '%', ' d', ' Cr' …
+    unit?: string;              // '%', ' d', ' M' ($ millions) …
     target?: number;
     max?: number;
     highlightAbove?: number;
@@ -76,7 +76,7 @@ export type ListEnvelope<T> = T[] | { items: T[] };
 export interface HealthResponse { status: string; [k: string]: unknown }
 
 // ------------------------------------------------------------- dashboard ----
-export type KpiUnit = 'count' | 'currency_inr' | 'percent' | 'days' | 'decimal';
+export type KpiUnit = 'count' | 'currency' | 'percent' | 'days' | 'decimal';
 
 export interface Kpi {
   key: string;
@@ -117,7 +117,7 @@ export interface AdmissionsResponse {
 }
 
 /** GET /api/dashboard/revenue — chart keys: monthly_by_status, by_payer_status,
- *  pending_by_payer, status_mix. Amounts are INR. */
+ *  pending_by_payer, status_mix. Amounts are USD. */
 export interface RevenueResponse {
   period: ReportingPeriod;
   totals?: {
@@ -126,7 +126,7 @@ export interface RevenueResponse {
     paid_amount: number | null;
     pending_amount: number;
     denied_amount: number;
-    currency: 'INR';
+    currency: string;
   };
   charts?: Partial<Record<string, VisualizationSpec>>;
   last_refreshed?: string;

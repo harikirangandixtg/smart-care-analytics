@@ -16,6 +16,6 @@ export const appConfig: ApplicationConfig = {
     provideHttpClient(withInterceptors(environment.useMockApi ? [sessionInterceptor, mockApiInterceptor] : [sessionInterceptor])),
     // ECharts (~500 kB) is downloaded the first time a chart is drawn, not with the first page load.
     provideEchartsCore({ echarts: () => import('./core/echarts').then(m => m.echarts) }),
-    { provide: LOCALE_ID, useValue: 'en-IN' },
+    { provide: LOCALE_ID, useValue: 'en-US' },
   ],
 };

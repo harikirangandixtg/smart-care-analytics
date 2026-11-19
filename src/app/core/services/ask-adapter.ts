@@ -11,7 +11,7 @@ export const STATUS: Record<string, string> = {
   blocked: 'blocked', rejected: 'blocked', forbidden: 'blocked', unsupported: 'blocked', refused: 'blocked',
   error: 'error', failed: 'error',
 };
-const UNIT: Record<string, string> = { percent: '%', percentage: '%', days: ' d', inr: '', currency_inr: '', count: '' };
+const UNIT: Record<string, string> = { percent: '%', percentage: '%', days: ' d', usd: '', currency: '', currency_usd: '', count: '' };
 const title = (k: string) => k.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
 
 /**
@@ -27,10 +27,9 @@ export function normalizeAsk(raw: Raw): AskResponse {
   const table: Raw | undefined = raw['table'];
 
   // chart: `visualization` (real API) or `chart` (spec); fill the unit from the plan when missing
-  let chart: VisualizationSpec | null = (raw['chart'] ?? raw['visualization'] ?? null) as VisualizationSpec | null;
-  if (chart && typeof chart === 'object') {
+  let chart: VisualizationSpec | null = normalizeViz(raw['chart'] ?? raw['visualization'] ?? null, table);
+  if (chart) {
     const unit = UNIT[String(plan['unit'] ?? '').toLowerCase()];
-    chart = { ...chart, series: chart.series ?? [], data: chart.data ?? table?.['rows'] ?? [], options: { ...(chart.options ?? {}) } };
     if (unit && chart.options!.unit === undefined) chart.options!.unit = unit;
     // ISO period values ('2026-01-01') on the x-axis → 'Jan 26'
     const xk = chart.xKey;
@@ -170,4 +169,111 @@ export function metricLabel(key: unknown): string {
   const k = readable(key);
   if (!k) return '';
   return METRIC_LABELS[k] ?? k.replace(/_(\d+)d$/, ' over $1 days').replace(/_pct$/, ' %').replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+}
+
+/* ------------------------------------------------------------------ visualization
+ * The chart agent doesn't always use the frontend chart contract (chartType / xKey / seriesKey /
+ * series[{dataKey,label}]). Map the other common shapes onto it so a valid chart is drawn instead of nothing:
+ *   y / yKey / valueKey / dataKey / metric / yKeys[] / series: 'col' | ['col']  → series
+ *   groupBy / colorKey / group / category / (heatmap) yKey                      → seriesKey
+ *   x / categoryKey / labelKey / first text column                              → xKey
+ *   stacked_bar, grouped_bar, horizontal_bar, column, area, multi_line, donut… → supported types + options
+ */
+const TYPE_ALIASES: Record<string, { type: string; options?: Record<string, unknown> }> = {
+  bar: { type: 'bar' }, column: { type: 'bar' }, columns: { type: 'bar' }, grouped_bar: { type: 'bar' }, clustered_bar: { type: 'bar' },
+  stacked_bar: { type: 'bar', options: { stacked: true } }, stacked_column: { type: 'bar', options: { stacked: true } },
+  horizontal_bar: { type: 'bar', options: { orientation: 'horizontal' } }, barh: { type: 'bar', options: { orientation: 'horizontal' } },
+  line: { type: 'line' }, multi_line: { type: 'line' }, multiline: { type: 'line' }, time_series: { type: 'line' }, timeseries: { type: 'line' },
+  area: { type: 'line', options: { area: true } }, stacked_area: { type: 'line', options: { area: true, stacked: true } },
+  pie: { type: 'pie' }, donut: { type: 'pie', options: { donut: true } }, doughnut: { type: 'pie', options: { donut: true } },
+  heatmap: { type: 'heatmap' }, heat_map: { type: 'heatmap' }, sankey: { type: 'sankey' }, funnel: { type: 'funnel' },
+  gauge: { type: 'gauge' }, kpi: { type: 'gauge' }, boxplot: { type: 'boxplot' }, box_plot: { type: 'boxplot' }, table: { type: 'table' },
+};
+
+function normalizeViz(v: unknown, table: Raw | undefined): VisualizationSpec | null {
+  if (!v || typeof v !== 'object') {
+    if (!Array.isArray(table?.['rows']) || !table!['rows'].length) return null;
+    v = { chartType: 'table' };   // no chart sent: start from the table and let autoChart pick one
+  }
+  const s = v as Raw;
+  const data: Raw[] = Array.isArray(s['data']) ? s['data'] : Array.isArray(table?.['rows']) ? table!['rows'] : [];
+  const cols: string[] = data.length ? Object.keys(data[0]) : (table?.['columns'] ?? []);
+  const isNum = (c: string) => data.length > 0 && data.every(r => r[c] === null || r[c] === undefined || (typeof r[c] === 'number') || (typeof r[c] === 'string' && r[c].trim() !== '' && !isNaN(+r[c])));
+  const has = (c: unknown): c is string => typeof c === 'string' && (cols.length === 0 || cols.includes(c));
+
+  const rawType = String(s['chartType'] ?? s['chart_type'] ?? s['type'] ?? 'bar').toLowerCase().replace(/[\s-]+/g, '_');
+  const alias = TYPE_ALIASES[rawType];
+  const chartType = (alias?.type ?? rawType) as VisualizationSpec['chartType'];
+  const heat = chartType === 'heatmap';
+
+  const xKey = [s['xKey'], s['x'], s['x_key'], s['categoryKey'], s['labelKey'], s['dimension']].find(has)
+    ?? cols.find(c => !isNum(c));
+  const groupCandidates = [s['seriesKey'], s['series_key'], s['groupBy'], s['group_by'], s['colorKey'], s['color'], s['group'], s['category'], heat ? (s['yKey'] ?? s['y']) : undefined];
+  let seriesKey = groupCandidates.find(c => has(c) && c !== xKey && !isNum(c as string)) as string | undefined;
+
+  // the measure(s)
+  let series: { dataKey: string; label?: string }[] = [];
+  const raw = s['series'];
+  if (Array.isArray(raw) && raw.length) {
+    series = raw.map((x: unknown) => (typeof x === 'string' ? { dataKey: x } : (x as Raw)))
+      .map((x: Raw) => ({ dataKey: x['dataKey'] ?? x['key'] ?? x['field'] ?? x['y'] ?? x['name'], label: x['label'] ?? x['name'] }))
+      .filter(x => typeof x.dataKey === 'string' && has(x.dataKey));
+  } else if (typeof raw === 'string' && has(raw)) {
+    series = [{ dataKey: raw }];
+  }
+  if (!series.length) {
+    const yKeys = [s['yKeys'], s['y_keys'], s['valueKeys']].find(Array.isArray) as string[] | undefined;
+    const single = [heat ? undefined : s['yKey'], heat ? undefined : s['y'], s['valueKey'], s['value_key'], s['value'], s['dataKey'], s['measure'], s['metric']].find(c => has(c) && isNum(c as string));
+    const picks = yKeys?.filter(c => has(c)) ?? (single ? [single as string] : cols.filter(c => c !== xKey && c !== seriesKey && isNum(c)).slice(0, seriesKey ? 1 : 3));
+    series = picks.map(c => ({ dataKey: c, label: title(c) }));
+  }
+  // heatmap / long data with a second text column but no group named: use it as the group
+  if (!seriesKey && (heat || (series.length === 1 && chartType !== 'pie'))) {
+    seriesKey = cols.find(c => c !== xKey && !isNum(c) && !series.some(x => x.dataKey === c) && new Set(data.map(r => r[c])).size < data.length);
+  }
+
+  const spec = {
+    ...(s as unknown as VisualizationSpec),
+    chartType, xKey, seriesKey,
+    series: series.map(x => ({ dataKey: x.dataKey, label: x.label ?? title(x.dataKey) })),
+    data,
+    options: { ...(alias?.options ?? {}), ...((s['options'] as Raw) ?? {}) },
+  } as VisualizationSpec;
+  return spec.chartType === 'table' ? autoChart(spec, cols, isNum) : spec;
+}
+
+/**
+ * The API sometimes answers with chartType "table" (or no chart). When the rows can be charted, pick a chart
+ * the way the chart contract would; the Table tab still shows every row. Otherwise keep the table.
+ *   time × measure                       → line
+ *   time × group × measure, ≤ 6 groups   → multi-line;  more groups → heatmap (group × period)
+ *   category × measure                   → bar (horizontal above 5 bars)
+ *   category × group × measure, ≤ 4 grp  → grouped bar; more → heatmap
+ */
+function autoChart(spec: VisualizationSpec, cols: string[], isNum: (c: string) => boolean): VisualizationSpec {
+  const data = spec.data ?? [];
+  const textCols = cols.filter(c => !isNum(c));
+  const measure = spec.series?.[0]?.dataKey ?? cols.find(c => isNum(c));
+  if (!data.length || !measure || data.length > 500) return spec;
+  const isTime = (c: string) => /period|month|week|quarter|date|year|day/i.test(c) || data.every(r => /^\d{4}-\d{2}/.test(String(r[c])));
+  const x = (spec.xKey && textCols.includes(spec.xKey) ? spec.xKey : undefined) ?? textCols.find(isTime) ?? textCols[0];
+  if (!x) return spec;
+  const group = spec.seriesKey && spec.seriesKey !== x ? spec.seriesKey : textCols.find(c => c !== x);
+  const time = isTime(x);
+  const nGroups = group ? new Set(data.map(r => r[group])).size : 0;
+  const nX = new Set(data.map(r => r[x])).size;
+  const series = spec.series?.length ? spec.series : [{ dataKey: measure, label: title(measure) }];
+  let chartType: VisualizationSpec['chartType'];
+  let options: VisualizationSpec['options'] = { ...(spec.options ?? {}) };
+  if (!group || nGroups <= 1) {
+    if (nX < 2 && !time) return spec;
+    chartType = time ? 'line' : 'bar';
+    if (!time && nX > 5) options = { ...options, orientation: 'horizontal' };
+    if (time) options = { ...options, markPeak: true };
+  } else if (time ? nGroups <= 6 : nGroups <= 4) {
+    chartType = time ? 'line' : 'bar';
+  } else {
+    chartType = 'heatmap';
+  }
+  return { ...spec, chartType, xKey: x, seriesKey: group && nGroups > 1 ? group : undefined, series: series.slice(0, 1), options };
 }
